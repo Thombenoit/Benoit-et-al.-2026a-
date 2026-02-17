@@ -1,0 +1,780 @@
+---
+title: "meta-analysis presence absence"
+author: "T. Benoit"
+format: html
+editor: visual
+echo: FALSE
+---
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+
+library(metafor)
+library(MuMIn)
+library(lmtest)
+library(multcomp)
+```
+
+# Load data
+
+```{r}
+pa_df <- read_excel(here::here("00_DATA", "meta_pa.xlsx"), na = "NA")
+
+pa_df <- pa_df %>%
+  filter(!is.na(t_mean)) %>%
+  filter(!is.na(c_mean)) %>%
+  filter(!is.na(t_n)) %>%
+  filter(!is.na(c_n)) %>%
+  filter(!(is.na(t_sd) & is.na(t_se))) %>%
+  filter(!(is.na(c_sd) & is.na(c_se))) %>%
+  filter(is.na(taxo_group_pa)) %>%
+  filter(habitat_small_typo != "mixed species")
+
+pa_complete_df <- pa_df %>%
+  rowwise() %>%
+  mutate(t_sd = if_else(is.na(t_sd), t_se*sqrt(t_n), t_sd)) %>%
+  mutate(c_sd = if_else(is.na(c_sd), c_se*sqrt(c_n), c_sd))
+```
+
+# Compute ES
+
+```{r}
+pa_complete_df$t_sd[pa_complete_df$t_sd == 0] <- 1e-6
+pa_complete_df$c_sd[pa_complete_df$c_sd == 0] <- 1e-6
+
+es_df <- escalc(measure = "ROM",       
+             m1i = pa_complete_df$t_mean,
+             m2i = pa_complete_df$c_mean,
+             sd1i = pa_complete_df$t_sd,
+             sd2i = pa_complete_df$c_sd,
+             n1i = pa_complete_df$t_n,
+             n2i = pa_complete_df$c_n, 
+             var.names=c("LRR","LRR_var"))
+
+pa_complete_df$effect_size <- es_df$LRR
+pa_complete_df$variance <- es_df$LRR_var
+
+ggplot(pa_complete_df, aes(x = effect_size)) + 
+  geom_histogram(binwidth = 0.1, color = "black", fill = "skyblue") + 
+  labs(x = "Effect size", y = "Frequence")
+
+pa_complete_df <- pa_complete_df %>%
+  filter(!is.na(effect_size))
+
+ggplot(pa_complete_df, aes(x = c_mean, y = effect_size)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed")
+
+pa_complete_min_df <- pa_complete_df %>%
+  filter(is.na(min_max)|min_max == "min")
+
+pa_complete_max_df <- pa_complete_df %>%
+  filter(is.na(min_max)|min_max == "max")
+```
+
+# Model max
+
+## Model and cleaning
+
+```{r}
+pa_complete_max_model_df <- pa_complete_max_df  %>%
+  mutate(habitat_small_typo = factor(habitat_small_typo, levels = unique(habitat_small_typo))) %>%
+  mutate(nb_presence = rowSums(across(c(epifau_pa, infau_pa, fish_pa), ~ .x == "presence", .names = NULL), na.rm = TRUE)) %>%
+  mutate(fauna_type = case_when(
+    nb_presence >= 2 ~ "multi-group faunal assemblages",
+    epifau_pa == "presence" ~ "epifauna",
+    infau_pa == "presence" ~ "infauna",
+    fish_pa == "presence" ~ "fish",
+    TRUE ~ NA_character_
+  )) %>%
+  mutate(fauna_type = factor(fauna_type, levels = unique(fauna_type)))
+  
+
+contrasts(pa_complete_max_model_df$habitat_small_typo) <- contr.sum(length(levels(pa_complete_max_model_df$habitat_small_typo)))
+
+contrasts(pa_complete_max_model_df$fauna_type) <- 
+  contr.sum(length(levels(pa_complete_max_model_df$fauna_type)))
+
+random2max <- rma.mv(effect_size , variance,
+            mods = ~ habitat_small_typo + fauna_type,
+            random = ~ 1|id_article,
+            data = pa_complete_max_model_df)
+
+intercept.stats <- coef(summary(random2max))[1, c(1,2,5,6)]
+
+# Fauna
+Cmat <- contrasts(pa_complete_max_model_df$fauna_type)
+coef_ac <- matrix(coef(random2max)[14:16])
+coef_bc <- (Cmat %*% coef_ac)[, 1]
+var_ac <- vcov(random2max)[14:16, 14:16]
+var_bc <- Cmat %*% var_ac %*% t(Cmat)
+std.error_bc <- sqrt(diag(var_bc))
+t.stats_bc <- coef_bc / std.error_bc
+stats.tab_fauna <- cbind("estimate" = coef_bc,
+                      "se" = std.error_bc,
+                      "ci.lb" = NA,
+                      "ci.ub" = NA
+                      )
+stats.tab_fauna[, "ci.lb"] <- stats.tab_fauna[, "estimate"] - 1.96 * stats.tab_fauna[, "se"]
+stats.tab_fauna[, "ci.ub"] <- stats.tab_fauna[, "estimate"] + 1.96 * stats.tab_fauna[, "se"]
+stats.tab_fauna[, "estimate"] <- stats.tab_fauna[, "estimate"] + intercept.stats$estimate
+stats.tab_fauna[, "ci.lb"] <- stats.tab_fauna[, "ci.lb"] + intercept.stats$estimate
+stats.tab_fauna[, "ci.ub"] <- stats.tab_fauna[, "ci.ub"] + intercept.stats$estimate
+
+# Habitat
+
+Cmat <- contrasts(pa_complete_max_model_df$habitat_small_typo)
+coef_ac <- matrix(coef(random2max)[2:13])
+coef_bc <- (Cmat %*% coef_ac)[, 1]
+var_ac <- vcov(random2max)[2:13, 2:13]
+var_bc <- Cmat %*% var_ac %*% t(Cmat)
+std.error_bc <- sqrt(diag(var_bc))
+t.stats_bc <- coef_bc / std.error_bc
+stats.tab_habitat <- cbind("estimate" = coef_bc,
+                      "se" = std.error_bc,
+                      "ci.lb" = NA,
+                      "ci.ub" = NA
+                      )
+stats.tab_habitat[, "ci.lb"] <- stats.tab_habitat[, "estimate"] - 1.96 * stats.tab_habitat[, "se"]
+stats.tab_habitat[, "ci.ub"] <- stats.tab_habitat[, "estimate"] + 1.96 * stats.tab_habitat[, "se"]
+stats.tab_habitat[, "estimate"] <- stats.tab_habitat[, "estimate"] + intercept.stats$estimate
+stats.tab_habitat[, "ci.lb"] <- stats.tab_habitat[, "ci.lb"] + intercept.stats$estimate
+stats.tab_habitat[, "ci.ub"] <- stats.tab_habitat[, "ci.ub"] + intercept.stats$estimate
+
+
+stats.tab <- rbind(intercept.stats, stats.tab_fauna)
+stats.tab <- rbind(stats.tab, stats.tab_habitat)
+```
+
+## Diagnostics
+
+```{r}
+model2max <- rma(effect_size , variance,
+            mods = ~ habitat_small_typo + fauna_type,
+            data = pa_complete_max_model_df) 
+
+shapiro.test(resid(random2max)) # pas la normalité
+bptest(resid(random2max) ~ fitted(random2max)) # variance homogène
+
+p_a <- ggplot(data = data.frame(resid = residuals(random2max)), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line(linetype = 'dashed', color = '#ef8a47', size = 1) +
+  labs(
+    title = "Taxa model residual QQ plot",
+    x = "Theoretical quantiles",
+    y = "Sample quantiles"
+  ) +
+  theme_classic()
+
+fitted_val <- predict(random2max)
+
+data_fit <- data.frame(fitted = fitted_val$pred,
+                       residual = residuals(random2max))
+
+p_b <- ggplot(data = data_fit, aes(x = fitted, y = residual)) +
+    geom_point(color = '#203147') +
+    geom_hline(yintercept = 0, linetype = "dashed", color = '#ef8a47', size = 1) +
+  labs(title = "Taxa model residuals vs fitted values",
+       x = "Fitted values",
+       y = "Residuals") +
+  theme_classic()
+
+plot_list <- list(p_a, p_b)
+
+grid_plot <- do.call(grid.arrange, c(plot_list, ncol = 2))
+
+ggsave(here::here("02_FIGURES", "figure_Sup_diag_max.pdf"), grid_plot, width = 2000, height = 1000, units = "px", dpi = 210,
+  device = cairo_pdf)
+
+pdf(here::here("02_FIGURES", "figure_Sup_funel_max.pdf"), width = 5, height = 5)
+funnel(random2max, label = TRUE,
+       xlab = "Residual value",
+       ylab = "Standard error")
+dev.off()
+
+regtest(model2max) # pas de biais
+
+random2max
+
+fsn(x = effect_size, vi = variance, data = pa_complete_max_model_df) # Cela indique qu'il faudrait 118863 études supplémentaires (de taille et poids similaires aux études existantes) ayant un effet nul pour rendre le résultat global non significatif
+```
+
+## Plot meta-analysis
+
+```{r}
+stats.tab
+
+overall_effect <- data.frame(
+  habitat_small_typo = "overall effect",
+  estimate = stats.tab[1,1],
+  se = stats.tab[1,2],
+  ci.lb = stats.tab[1,3],
+  ci.ub = stats.tab[1,4],
+  pval = NA
+)
+
+# percentage
+(exp(overall_effect$estimate) - 1) * 100
+
+habitat_effects <- data.frame(
+  habitat_small_typo = rownames(stats.tab[6:18,]),
+  estimate = stats.tab[6:18,1],
+  se = stats.tab[6:18,2],
+  ci.lb = stats.tab[6:18,3],
+  ci.ub = stats.tab[6:18,4],
+  pval = NA
+)
+
+fauna_effects <- data.frame(
+  habitat_small_typo = rownames(stats.tab[2:5,]),
+  estimate = stats.tab[2:5,1],
+  se = stats.tab[2:5,2],
+  ci.lb = stats.tab[2:5,3],
+  ci.ub = stats.tab[2:5,4],
+  pval = NA
+)
+
+(exp(fauna_effects$estimate[3]) - 1) * 100
+
+plot_data <- bind_rows(overall_effect, habitat_effects) %>%
+  mutate(habitat_small_typo = str_remove(habitat_small_typo, "^habitat_small_typo"))
+
+plot_data <- bind_rows(plot_data, fauna_effects) %>%
+  mutate(habitat_small_typo = str_remove(habitat_small_typo, "^fauna_type"))
+
+# plot_data_tmp <- data.frame(
+#   habitat_small_typo = c("coralline algae", "turfing red algae", "hard coral", "mangrove"),
+#   estimate = c(NA, NA, NA, NA),
+#   se = c(NA, NA, NA, NA),
+#   ci.lb = c(NA, NA, NA, NA),
+#   ci.ub = c(NA, NA, NA, NA),
+#   pval = c(NA, NA, NA, NA)
+# )
+
+# plot_data <- rbind(plot_data, plot_data_tmp)
+
+study_counts <- pa_complete_max_model_df %>%
+  group_by(habitat_small_typo) %>%
+  summarise(n_studies = n()) %>%
+  ungroup()
+study_counts_tmp <- data.frame(habitat_small_typo = "overall effect",
+                               n_studies = nrow(pa_complete_max_model_df))
+
+study_counts <- rbind(study_counts, study_counts_tmp)
+
+study_counts_tmp <- pa_complete_max_model_df %>%
+  group_by(fauna_type) %>%
+  summarise(n_studies = n()) %>%
+  ungroup()
+colnames(study_counts_tmp)[1] <- "habitat_small_typo"
+
+study_counts <- rbind(study_counts, study_counts_tmp)
+
+article_count <- pa_complete_max_model_df %>%
+  dplyr::select(id_article, habitat_small_typo) %>%
+  distinct() %>%
+  group_by(habitat_small_typo) %>%
+  summarise(n_article = n()) %>%
+  ungroup()
+article_count_tmp <- data.frame(habitat_small_typo = "overall effect",
+                               n_article = length(unique(pa_complete_max_model_df$id_article)))
+article_count <- rbind(article_count, article_count_tmp)
+
+article_count_tmp <- pa_complete_max_model_df %>%
+  dplyr::select(id_article, fauna_type) %>%
+  distinct() %>%
+  group_by(fauna_type) %>%
+  summarise(n_article = n()) %>%
+  ungroup()
+colnames(article_count_tmp)[1] <- "habitat_small_typo"
+
+article_count <- rbind(article_count, article_count_tmp)
+
+plot_data <- plot_data %>%
+  left_join(study_counts) %>%
+  left_join(article_count) %>%
+  arrange(desc(n_studies), desc(n_article)) %>%
+  mutate(label_n = paste0("N = ", n_studies, " (", n_article, ")"))
+
+plot_data <- plot_data %>%
+  arrange(desc(estimate), desc(n_studies), desc(n_article))
+
+plot_data <- plot_data %>%
+  mutate(pval = if_else(ci.lb <= 0, 1, 0))
+
+plot_data$habitat_small_typo <- factor(plot_data$habitat_small_typo, 
+                                       levels = c(rev(plot_data$habitat_small_typo[-c(3,7,10,11,16)]), 
+                                                  "multi-group faunal assemblages", "fish", "infauna", "epifauna", "overall effect"))
+
+pa_filtered_df <- pa_complete_max_model_df %>%
+  dplyr::select(habitat_small_typo, effect_size, t_n)
+
+pa_filtered_df_fauna <- pa_complete_max_model_df %>%
+  dplyr::select(habitat_small_typo = fauna_type, effect_size, t_n)
+
+pa_filtered_df_overall <- pa_complete_max_model_df %>%
+  dplyr::select(habitat_small_typo, effect_size, t_n)
+pa_filtered_df_overall$habitat_small_typo <- "overall effect"
+
+# pa_filtered_df <- rbind(pa_filtered_df, pa_filtered_df_fauna)
+# pa_filtered_df <- rbind(pa_filtered_df, pa_filtered_df_overall)
+
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "mussel"] <- "#536c94"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "oyster"] <- "#b9b7af"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "hard coral"] <- "#f81118"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "coralline algae"] <- "#f5265c"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "seagrass"] <- "#64b432"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "salt marsh"] <- "#10961c"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "mangrove"] <- "#284b2b"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "fish"] <- "#81b29a"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "infauna"] <- "#e07a5f"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "epifauna"] <- "#3d405b"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "multi-group faunal assemblages"] <- "grey35"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "overall effect"] <- "grey95"
+
+
+
+plot_data$color[plot_data$habitat_small_typo == "mussel"] <- "#536c94"
+plot_data$color[plot_data$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+plot_data$color[plot_data$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+plot_data$color[plot_data$habitat_small_typo == "oyster"] <- "#b9b7af"
+plot_data$color[plot_data$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+plot_data$color[plot_data$habitat_small_typo == "hard coral"] <- "#f81118"
+plot_data$color[plot_data$habitat_small_typo == "coralline algae"] <- "#f5265c"
+plot_data$color[plot_data$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+plot_data$color[plot_data$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+plot_data$color[plot_data$habitat_small_typo == "seagrass"] <- "#64b432"
+plot_data$color[plot_data$habitat_small_typo == "salt marsh"] <- "#10961c"
+plot_data$color[plot_data$habitat_small_typo == "mangrove"] <- "#284b2b"
+plot_data$color[plot_data$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+
+plot_data$color[plot_data$habitat_small_typo == "fish"] <- "#81b29a"
+plot_data$color[plot_data$habitat_small_typo == "infauna"] <- "#e07a5f"
+plot_data$color[plot_data$habitat_small_typo == "epifauna"] <- "#3d405b"
+plot_data$color[plot_data$habitat_small_typo == "multi-group faunal assemblages"] <- "grey35"
+plot_data$color[plot_data$habitat_small_typo == "overall effect"] <- "white"
+
+# pa_filtered_df$habitat_small_typo <- factor(pa_filtered_df$habitat_small_typo,
+#                                             levels = levels(plot_data$habitat_small_typo)[-18])
+
+# pa_filtered_df <- pa_filtered_df %>%
+#   filter(!is.na(habitat_small_typo))
+
+# plot_data2 <- plot_data %>%
+#   filter(habitat_small_typo %in% c("overall effect", "infauna", "epifauna", "fish"))
+# 
+# plot_data <- plot_data %>%
+#   filter(!habitat_small_typo %in% c("overall effect", "infauna", "epifauna", "fish"))
+
+pa_filtered_df$habitat_small_typo <- factor(pa_filtered_df$habitat_small_typo, 
+                                            levels = levels(plot_data$habitat_small_typo))
+
+p <- ggplot(plot_data, aes(x = estimate, y = habitat_small_typo)) +
+  ggbeeswarm::geom_quasirandom(data = pa_filtered_df, 
+             aes(x = effect_size, y = habitat_small_typo, size = t_n, color = color), 
+             shape = 16,  alpha = 0.6) +
+  scale_color_identity() +
+  geom_errorbarh(aes(xmin = estimate - se, xmax = estimate + se), height = 0, linewidth = 1) +
+  geom_errorbarh(aes(xmin = ci.lb, xmax = ci.ub), height = 0) +
+  geom_point(aes(fill = ifelse(pval > 0.05, "#000", color), shape = 21), size = 2, stroke = 1) + 
+  scale_shape_identity() +
+  scale_fill_identity() +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+geom_text(
+  aes(
+    x = 3.5,
+    label = paste0(
+      "italic(N) == ",
+      sub("N = ([0-9]+) \\(([0-9]+)\\)", 
+          "\\1 * ' (' * \\2 * ')'", 
+          label_n)
+    ),
+    hjust = 0,
+    vjust = 0.4
+  ),
+  parse = TRUE,
+  size = 4
+) +
+  scale_x_continuous(limits = c(-2.5, 4)) +
+  theme_classic() +
+  labs(x = "Effect size (log ratio of means)", y = NULL) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  theme(axis.text.y = element_text(vjust = 0.5, color = "black"),
+            axis.text.x = element_text(vjust = 0.5, color = "black"))
+
+p
+
+
+ggsave(here::here("02_FIGURES", "figure_6.pdf"), p, width = 2200, height = 1000, units = "px", dpi = 210,
+device = cairo_pdf)
+
+p
+
+```
+
+# Model min
+
+## Model and cleaning
+
+```{r}
+pa_complete_min_model_df <- pa_complete_min_df  %>%
+  mutate(habitat_small_typo = factor(habitat_small_typo, levels = unique(habitat_small_typo))) %>%
+  mutate(nb_presence = rowSums(across(c(epifau_pa, infau_pa, fish_pa), ~ .x == "presence", .names = NULL), na.rm = TRUE)) %>%
+  mutate(fauna_type = case_when(
+    nb_presence >= 2 ~ "multi-group faunal assemblages",
+    epifau_pa == "presence" ~ "epifauna",
+    infau_pa == "presence" ~ "infauna",
+    fish_pa == "presence" ~ "fish",
+    TRUE ~ NA_character_
+  )) %>%
+  mutate(fauna_type = factor(fauna_type, levels = unique(fauna_type)))
+
+contrasts(pa_complete_min_model_df$habitat_small_typo) <- contr.sum(length(levels(pa_complete_min_model_df$habitat_small_typo)))
+
+contrasts(pa_complete_min_model_df$fauna_type) <- 
+  contr.sum(length(levels(pa_complete_min_model_df$fauna_type)))
+
+random2max <- rma.mv(effect_size , variance,
+            mods = ~ habitat_small_typo + fauna_type,
+            random = ~ 1|id_article,
+            data = pa_complete_min_model_df)
+
+intercept.stats <- coef(summary(random2max))[1, c(1,2,5,6)]
+
+# Fauna
+Cmat <- contrasts(pa_complete_min_model_df$fauna_type)
+coef_ac <- matrix(coef(random2max)[14:16])
+coef_bc <- (Cmat %*% coef_ac)[, 1]
+var_ac <- vcov(random2max)[14:16, 14:16]
+var_bc <- Cmat %*% var_ac %*% t(Cmat)
+std.error_bc <- sqrt(diag(var_bc))
+t.stats_bc <- coef_bc / std.error_bc
+stats.tab_fauna <- cbind("estimate" = coef_bc,
+                      "se" = std.error_bc,
+                      "ci.lb" = NA,
+                      "ci.ub" = NA
+                      )
+stats.tab_fauna[, "ci.lb"] <- stats.tab_fauna[, "estimate"] - 1.96 * stats.tab_fauna[, "se"]
+stats.tab_fauna[, "ci.ub"] <- stats.tab_fauna[, "estimate"] + 1.96 * stats.tab_fauna[, "se"]
+stats.tab_fauna[, "estimate"] <- stats.tab_fauna[, "estimate"] + intercept.stats$estimate
+stats.tab_fauna[, "ci.lb"] <- stats.tab_fauna[, "ci.lb"] + intercept.stats$estimate
+stats.tab_fauna[, "ci.ub"] <- stats.tab_fauna[, "ci.ub"] + intercept.stats$estimate
+
+# Habitat
+
+Cmat <- contrasts(pa_complete_min_model_df$habitat_small_typo)
+coef_ac <- matrix(coef(random2max)[2:13])
+coef_bc <- (Cmat %*% coef_ac)[, 1]
+var_ac <- vcov(random2max)[2:13, 2:13]
+var_bc <- Cmat %*% var_ac %*% t(Cmat)
+std.error_bc <- sqrt(diag(var_bc))
+t.stats_bc <- coef_bc / std.error_bc
+stats.tab_habitat <- cbind("estimate" = coef_bc,
+                      "se" = std.error_bc,
+                      "ci.lb" = NA,
+                      "ci.ub" = NA
+                      )
+stats.tab_habitat[, "ci.lb"] <- stats.tab_habitat[, "estimate"] - 1.96 * stats.tab_habitat[, "se"]
+stats.tab_habitat[, "ci.ub"] <- stats.tab_habitat[, "estimate"] + 1.96 * stats.tab_habitat[, "se"]
+stats.tab_habitat[, "estimate"] <- stats.tab_habitat[, "estimate"] + intercept.stats$estimate
+stats.tab_habitat[, "ci.lb"] <- stats.tab_habitat[, "ci.lb"] + intercept.stats$estimate
+stats.tab_habitat[, "ci.ub"] <- stats.tab_habitat[, "ci.ub"] + intercept.stats$estimate
+
+
+stats.tab <- rbind(intercept.stats, stats.tab_fauna)
+stats.tab <- rbind(stats.tab, stats.tab_habitat)
+```
+
+## Diagnostics
+
+```{r}
+model2max <- rma(effect_size , variance,
+            mods = ~ habitat_small_typo + fauna_type,
+            data = pa_complete_min_model_df) 
+
+shapiro.test(resid(random2max)) # pas la normalité
+bptest(resid(random2max) ~ fitted(random2max)) # variance homogène
+
+p_a <- ggplot(data = data.frame(resid = residuals(random2max)), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line(linetype = 'dashed', color = '#ef8a47', size = 1) +
+  labs(
+    title = "Taxa model residual QQ plot",
+    x = "Theoretical quantiles",
+    y = "Sample quantiles"
+  ) +
+  theme_classic()
+
+fitted_val <- predict(random2max)
+
+data_fit <- data.frame(fitted = fitted_val$pred,
+                       residual = residuals(random2max))
+
+p_b <- ggplot(data = data_fit, aes(x = fitted, y = residual)) +
+    geom_point(color = '#203147') +
+    geom_hline(yintercept = 0, linetype = "dashed", color = '#ef8a47', size = 1) +
+    labs(title = "Taxa model residuals vs fitted values",
+         x = "Fitted values",
+         y = "Residuals") +
+    theme_classic()
+
+plot_list <- list(p_a, p_b)
+
+grid_plot <- do.call(grid.arrange, c(plot_list, ncol = 2))
+
+ggsave(here::here("02_FIGURES", "figure_Sup_diag_min.pdf"), grid_plot, width = 2000, height = 1000, units = "px", dpi = 210,
+device = cairo_pdf)
+
+pdf(here::here("02_FIGURES", "figure_Sup_funel_min.pdf"), width = 5, height = 5)
+funnel(random2max, label = TRUE,
+       xlab = "Residual value",
+       ylab = "Standard error")
+dev.off()
+
+regtest(model2max) # pas de biais
+
+random2max
+
+fsn(x = effect_size, vi = variance, data = pa_complete_min_model_df) # Cela indique qu'il faudrait 103794 études supplémentaires (de taille et poids similaires aux études existantes) ayant un effet nul pour rendre le résultat global non significatif
+```
+
+## Plot meta-analysis
+
+```{r}
+stats.tab
+
+overall_effect <- data.frame(
+  habitat_small_typo = "overall effect",
+  estimate = stats.tab[1,1],
+  se = stats.tab[1,2],
+  ci.lb = stats.tab[1,3],
+  ci.ub = stats.tab[1,4],
+  pval = NA
+)
+
+# percentage
+(exp(overall_effect$estimate) - 1) * 100
+
+habitat_effects <- data.frame(
+  habitat_small_typo = rownames(stats.tab[6:18,]),
+  estimate = stats.tab[6:18,1],
+  se = stats.tab[6:18,2],
+  ci.lb = stats.tab[6:18,3],
+  ci.ub = stats.tab[6:18,4],
+  pval = NA
+)
+
+fauna_effects <- data.frame(
+  habitat_small_typo = rownames(stats.tab[2:5,]),
+  estimate = stats.tab[2:5,1],
+  se = stats.tab[2:5,2],
+  ci.lb = stats.tab[2:5,3],
+  ci.ub = stats.tab[2:5,4],
+  pval = NA
+)
+
+(exp(fauna_effects$estimate[4]) - 1) * 100
+
+plot_data <- bind_rows(overall_effect, habitat_effects) %>%
+  mutate(habitat_small_typo = str_remove(habitat_small_typo, "^habitat_small_typo"))
+
+plot_data <- bind_rows(plot_data, fauna_effects) %>%
+  mutate(habitat_small_typo = str_remove(habitat_small_typo, "^fauna_type"))
+
+# plot_data_tmp <- data.frame(
+#   habitat_small_typo = c("coralline algae", "turfing red algae", "hard coral", "mangrove"),
+#   estimate = c(NA, NA, NA, NA),
+#   se = c(NA, NA, NA, NA),
+#   ci.lb = c(NA, NA, NA, NA),
+#   ci.ub = c(NA, NA, NA, NA),
+#   pval = c(NA, NA, NA, NA)
+# )
+
+# plot_data <- rbind(plot_data, plot_data_tmp)
+
+study_counts <- pa_complete_min_model_df %>%
+  group_by(habitat_small_typo) %>%
+  summarise(n_studies = n()) %>%
+  ungroup()
+study_counts_tmp <- data.frame(habitat_small_typo = "overall effect",
+                               n_studies = nrow(pa_complete_min_model_df))
+
+study_counts <- rbind(study_counts, study_counts_tmp)
+
+study_counts_tmp <- pa_complete_min_model_df %>%
+  group_by(fauna_type) %>%
+  summarise(n_studies = n()) %>%
+  ungroup()
+colnames(study_counts_tmp)[1] <- "habitat_small_typo"
+
+study_counts <- rbind(study_counts, study_counts_tmp)
+
+article_count <- pa_complete_min_model_df %>%
+  dplyr::select(id_article, habitat_small_typo) %>%
+  distinct() %>%
+  group_by(habitat_small_typo) %>%
+  summarise(n_article = n()) %>%
+  ungroup()
+article_count_tmp <- data.frame(habitat_small_typo = "overall effect",
+                               n_article = length(unique(pa_complete_min_model_df$id_article)))
+article_count <- rbind(article_count, article_count_tmp)
+
+article_count_tmp <- pa_complete_min_model_df %>%
+  dplyr::select(id_article, fauna_type) %>%
+  distinct() %>%
+  group_by(fauna_type) %>%
+  summarise(n_article = n()) %>%
+  ungroup()
+colnames(article_count_tmp)[1] <- "habitat_small_typo"
+
+article_count <- rbind(article_count, article_count_tmp)
+
+plot_data <- plot_data %>%
+  left_join(study_counts) %>%
+  left_join(article_count) %>%
+  arrange(desc(n_studies), desc(n_article)) %>%
+  mutate(label_n = paste0("N = ", n_studies, " (", n_article, ")"))
+
+plot_data <- plot_data %>%
+  arrange(desc(estimate), desc(n_studies), desc(n_article))
+
+plot_data <- plot_data %>%
+  mutate(pval = if_else(ci.lb <= 0, 1, 0))
+
+plot_data$habitat_small_typo <- factor(plot_data$habitat_small_typo, 
+                                       levels = c(rev(plot_data$habitat_small_typo[-c(2,8,12,13,16)]), 
+                                                  "multi-group faunal assemblages", "fish", "infauna", "epifauna", "overall effect"))
+
+pa_filtered_df <- pa_complete_min_model_df %>%
+  dplyr::select(habitat_small_typo, effect_size, t_n)
+
+pa_filtered_df_fauna <- pa_complete_min_model_df %>%
+  dplyr::select(habitat_small_typo = fauna_type, effect_size, t_n)
+
+pa_filtered_df_overall <- pa_complete_min_model_df %>%
+  dplyr::select(habitat_small_typo, effect_size, t_n)
+pa_filtered_df_overall$habitat_small_typo <- "overall effect"
+
+# pa_filtered_df <- rbind(pa_filtered_df, pa_filtered_df_fauna)
+# pa_filtered_df <- rbind(pa_filtered_df, pa_filtered_df_overall)
+
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "mussel"] <- "#536c94"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "oyster"] <- "#b9b7af"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "hard coral"] <- "#f81118"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "coralline algae"] <- "#f5265c"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "seagrass"] <- "#64b432"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "salt marsh"] <- "#10961c"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "mangrove"] <- "#284b2b"
+pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "fish"] <- "#81b29a"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "infauna"] <- "#e07a5f"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "epifauna"] <- "#3d405b"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "multi-group faunal assemblages"] <- "grey35"
+# pa_filtered_df$color[pa_filtered_df$habitat_small_typo == "overall effect"] <- "grey95"
+
+
+
+plot_data$color[plot_data$habitat_small_typo == "mussel"] <- "#536c94"
+plot_data$color[plot_data$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+plot_data$color[plot_data$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+plot_data$color[plot_data$habitat_small_typo == "oyster"] <- "#b9b7af"
+plot_data$color[plot_data$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+plot_data$color[plot_data$habitat_small_typo == "hard coral"] <- "#f81118"
+plot_data$color[plot_data$habitat_small_typo == "coralline algae"] <- "#f5265c"
+plot_data$color[plot_data$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+plot_data$color[plot_data$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+plot_data$color[plot_data$habitat_small_typo == "seagrass"] <- "#64b432"
+plot_data$color[plot_data$habitat_small_typo == "salt marsh"] <- "#10961c"
+plot_data$color[plot_data$habitat_small_typo == "mangrove"] <- "#284b2b"
+plot_data$color[plot_data$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+
+plot_data$color[plot_data$habitat_small_typo == "fish"] <- "#81b29a"
+plot_data$color[plot_data$habitat_small_typo == "infauna"] <- "#e07a5f"
+plot_data$color[plot_data$habitat_small_typo == "epifauna"] <- "#3d405b"
+plot_data$color[plot_data$habitat_small_typo == "multi-group faunal assemblages"] <- "grey35"
+plot_data$color[plot_data$habitat_small_typo == "overall effect"] <- "white"
+
+# pa_filtered_df$habitat_small_typo <- factor(pa_filtered_df$habitat_small_typo,
+#                                             levels = levels(plot_data$habitat_small_typo)[-18])
+
+# pa_filtered_df <- pa_filtered_df %>%
+#   filter(!is.na(habitat_small_typo))
+
+# plot_data2 <- plot_data %>%
+#   filter(habitat_small_typo %in% c("overall effect", "infauna", "epifauna", "fish"))
+# 
+# plot_data <- plot_data %>%
+#   filter(!habitat_small_typo %in% c("overall effect", "infauna", "epifauna", "fish"))
+
+pa_filtered_df$habitat_small_typo <- factor(pa_filtered_df$habitat_small_typo, 
+                                            levels = levels(plot_data$habitat_small_typo))
+
+p <- ggplot(plot_data, aes(x = estimate, y = habitat_small_typo)) +
+  ggbeeswarm::geom_quasirandom(data = pa_filtered_df, 
+             aes(x = effect_size, y = habitat_small_typo, size = t_n, color = color), 
+             shape = 16,  alpha = 0.6) +
+  scale_color_identity() +
+  geom_errorbarh(aes(xmin = estimate - se, xmax = estimate + se), height = 0, linewidth = 1) +
+  geom_errorbarh(aes(xmin = ci.lb, xmax = ci.ub), height = 0) +
+  geom_point(aes(fill = ifelse(pval > 0.05, "#000", color), shape = 21), size = 2, stroke = 1) + 
+  scale_shape_identity() +
+  scale_fill_identity() +
+  scale_x_continuous(limits = c(-2.5, 4)) +
+  theme_classic() +
+    scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+geom_text(
+  aes(
+    x = 3.5,
+    label = paste0(
+      "italic(N) == ",
+      sub("N = ([0-9]+) \\(([0-9]+)\\)", 
+          "\\1 * ' (' * \\2 * ')'", 
+          label_n)
+    ),
+    hjust = 0,
+    vjust = 0.4
+  ),
+  parse = TRUE,
+  size = 4
+)+
+  labs(x = "Effect size", y = "Habitat type") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  theme(axis.text.y = element_text(vjust = 0.5, color = "black"),
+            axis.text.x = element_text(vjust = 0.5, color = "black"))
+
+p
+
+
+ggsave(here::here("02_FIGURES", "meta_figure_panel_min.pdf"), p, width = 2300, height = 1000, units = "px", dpi = 210,
+device = cairo_pdf)
+
+p
+
+```

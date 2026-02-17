@@ -1,0 +1,484 @@
+---
+title: "meta-analysistraits"
+author: "T. Benoit"
+format: html
+editor: visual
+echo: FALSE
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readxl)
+
+library(metafor)
+library(MuMIn)
+library(lmtest)
+library(multcomp)
+library(lme4)
+library(boot)
+
+library(gridExtra)
+```
+
+# Load data
+
+```{r, echo=FALSE, warning=FALSE}
+trait_df <- read_excel(here::here("00_DATA", "meta_trait.xlsx"), na = "NA")
+trait_df$habitat_small_typo[trait_df$habitat_small_typo == unique(trait_df$habitat_small_typo)[5]] <- unique(trait_df$habitat_small_typo)[9]
+
+trait_df <- trait_df %>%
+  filter(trait != "habitat shape miscellaneous")
+
+article_ref <- trait_df %>%
+  dplyr::select(article_id) %>%
+  separate("article_id", c("article_id", "author", "year"), sep = "_") %>%
+  distinct()
+
+article_ref_corrected <- article_ref %>%
+  group_by(article_id, author) %>%
+  mutate(year = min(as.numeric(year), na.rm = TRUE)) %>%
+  ungroup() %>%
+  distinct()
+
+
+trait_df$article_id <- sub("_.*", "", trait_df$article_id)
+
+article1_df <- trait_df %>%
+  filter(article_id == "Mussels and canopy-forming algae as ecosystem engineers: their contribution to community organization in the rocky sublittoral") %>%
+  mutate(t_value = exp(as.numeric(t_value))-1) %>%
+  mutate(rs = exp(as.numeric(rs))-1) %>%
+  mutate(rs = round(rs)) %>%
+  dplyr::select(-c(t_mean, t_sd, t_se, t_n, rs_mean, rs_sd, rs_se, rs_n,
+                   ...26, ...27)) %>%
+  filter(is.na(taxo_group_pa))
+
+article2_df <- trait_df %>%
+  filter(article_id == "Ocean acidification can mediate biodiversity shifts by changing biogenic habitat") %>%
+  dplyr::select(-c(t_mean, t_sd, t_se, t_n, rs_mean, rs_sd, rs_se, rs_n,
+                   ...26, ...27)) %>%
+  filter(is.na(taxo_group_pa))
+
+article3_df <- trait_df %>%
+  filter(article_id == "Temperature-buffering by oyster habitat provides temporal stability for rocky shore communities") %>%
+  mutate(rs = exp(as.numeric(rs))) %>%
+  mutate(rs = round(rs)) %>%
+  dplyr::select(-c(t_mean, t_sd, t_se, t_n, rs_mean, rs_sd, rs_se, rs_n,
+                   ...26, ...27)) %>%
+  filter(is.na(taxo_group_pa))
+  
+trait_complete_df <- trait_df %>%
+  filter(!article_id %in% c("Mussels and canopy-forming algae as ecosystem engineers: their contribution to community organization in the rocky sublittoral", "Ocean acidification can mediate biodiversity shifts by changing biogenic habitat")) %>%
+  filter(!is.na(source)) %>%
+  filter(grepl("^\\d+\\.?\\d*$", t_value)) %>% # permet de filtrer les nombres
+  filter(!is.na(t_value)) %>%
+  filter(!is.na(rs)) %>%
+  dplyr::select(-c(t_mean, t_sd, t_se, t_n, rs_mean, rs_sd, rs_se, rs_n,
+                   ...26, ...27)) %>%
+  mutate(t_value = as.numeric(t_value)) %>%
+  mutate(rs = round(rs)) %>%
+  filter(habitat_small_typo != "mixed species") %>%
+  filter(is.na(taxo_group_pa))
+
+trait_complete_df <- rbind(trait_complete_df, article1_df, article2_df, article3_df) %>%
+  mutate(t_value = as.numeric(t_value)) %>%
+  filter(article_id != "Mussels and canopy-forming algae as ecosystem engineers: their contribution to community organization in the rocky sublittoral")
+
+trait_complete_df$trait[trait_complete_df$trait == "body weight"] <- "body mass"
+
+```
+
+Source : Introduction to Meta-Analysis. Michael Borenstein, L. V. Hedges, J. P. T. Higgins and H. R. Rothstein © 2009 John Wiley & Sons, Ltd. ISBN: 978-0-470-05724-7
+
+# Compute ES
+
+```{r}
+es_df <- trait_complete_df %>%
+  group_by(across(-c(t_value, rs, id_replicat))) %>%
+  mutate(tot = n()) %>%
+  mutate(
+    spearman_cor = cor(t_value, rs, method = "spearman")
+  ) %>%
+  ungroup() %>%
+  group_by(across(-c(t_value, rs, id_replicat))) %>%
+  mutate(spearman_cor = if_else(spearman_cor == 1, 0.999999, spearman_cor)) %>% ###
+  mutate(spearman_cor = if_else(spearman_cor == -1, -0.999999, spearman_cor)) %>% ###
+  filter(tot > 3) %>% ###
+  mutate(
+    fisher_z = 0.5 * log((1 + spearman_cor) / (1 - spearman_cor)),
+    var_fisher_z = 1 / (tot - 3),
+    variance = (1 - spearman_cor^2)^2/(tot - 1)
+  ) %>%
+  ungroup()
+
+trait_complete_df <- trait_complete_df %>%
+  group_by(across(-c(t_value, rs, id_replicat))) %>%
+  mutate(tot = n()) %>%
+  filter(tot > 3)
+
+trait_complete_df$cor <- es_df$spearman_cor
+trait_complete_df$fz <- es_df$fisher_z
+trait_complete_df$var_fisher_z <- es_df$var_fisher_z
+trait_complete_df$tot <- es_df$tot
+trait_complete_df$variance <- es_df$variance
+
+trait_complete_df <- trait_complete_df %>%
+  filter(tot >= 5) %>%
+  filter(!is.na(cor))
+
+length(unique(trait_complete_df$article_id)) # nombre d'article inclus dans cette meta-analyse
+
+trait_model_df <- trait_complete_df %>%
+  dplyr::select(-c(t_value, rs, id_site, id_season, id_replicat)) %>%
+  distinct()
+```
+
+# All studies all trait
+
+```{r}
+model_df <- trait_complete_df %>%
+  unite(col = "id_stud", "article_id", "habitat_sp", "habitat_small_typo", "id_sup", "trait", "epifauna_pa",
+        "infauna_pa", "fish_pa", "all_pa", "functional_group_pa", "id_site", "id_season", remove = FALSE, sep = "_")
+
+model_df$color[model_df$habitat_small_typo == "mussel"] <- "#536c94"
+model_df$color[model_df$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+model_df$color[model_df$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+model_df$color[model_df$habitat_small_typo == "oyster"] <- "#b9b7af"
+model_df$color[model_df$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+model_df$color[model_df$habitat_small_typo == "hard coral"] <- "#f81118"
+model_df$color[model_df$habitat_small_typo == "coralline algae"] <- "#f5265c"
+model_df$color[model_df$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+model_df$color[model_df$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+model_df$color[model_df$habitat_small_typo == "seagrass"] <- "#64b432"
+model_df$color[model_df$habitat_small_typo == "salt marsh"] <- "#10961c"
+model_df$color[model_df$habitat_small_typo == "mangrove"] <- "#284b2b"
+model_df$color[model_df$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+model_df$color[model_df$habitat_small_typo == "sponge"] <- "#F28C28"
+model_df$color[model_df$habitat_small_typo == "opportunistic green algae"] <- "#9FE2BF"
+
+model_df <- left_join(model_df, article_ref_corrected)
+
+select_best_model <- function(data, x, y) {
+  
+  # data <- trait_tmp_df
+  # x <- trait_tmp_df$t_value
+  # y <- trait_tmp_df$rs
+  
+  model_list <- list()
+  
+  cst_model <- lm(y ~ 1, data = trait_df)
+  linear_model <- lm(y ~ x, data = trait_df)
+  quadratic_model <- lm(y ~ poly(x, 2), data = trait_df)
+  
+  model_comparison <- model.sel(cst_model, linear_model, quadratic_model)
+  
+  keep_model <- get.models(model_comparison, 1)[[1]]
+  
+  model_list[[1]] <- keep_model
+  model_list[[2]] <- summary(keep_model)$coefficients[nrow(summary(keep_model)$coefficients),"Pr(>|t|)"]
+  
+  return(model_list)
+}
+
+traits <- unique(model_df$trait)
+
+traitPlot <- function(trait_name){
+  
+  # trait_name <- "habitat cover"
+  
+  plot_list <- list()
+  
+  trait_df <- model_df %>% 
+    filter(trait == trait_name) 
+
+  for (id in seq(length(unique(trait_df$id_stud)))) {
+    
+    # id <- 1
+    
+    id_tmp <- unique(trait_df$id_stud)[id]
+    
+    trait_tmp_df <- trait_df %>% 
+      filter(id_stud == id_tmp)
+
+    if (length(unique(trait_tmp_df$t_value)) > 3) {
+      best_fit <- deparse(formula(select_best_model(trait_tmp_df, trait_tmp_df$t_value, trait_tmp_df$rs)[[1]]))
+      r2 <- performance::r2(select_best_model(trait_tmp_df, trait_tmp_df$t_value, trait_tmp_df$rs)[[1]])
+      pval <- select_best_model(trait_tmp_df, trait_tmp_df$t_value, trait_tmp_df$rs)[[2]]
+    } else{
+      best_fit <- "x ~ y"
+      r2 <- performance::r2(lm(rs ~ t_value, data = trait_df))
+    }
+    
+    trait_tmp_df$best_model <- best_fit
+    trait_tmp_df$r2_val <- r2[[1]]
+    trait_tmp_df$p_val <- pval
+    
+    rho_val <- round(unique(trait_tmp_df$cor), 3)
+    r2_val <- round(r2[[1]], 3)
+    p_val <- round(pval, 3)
+    
+    if (r2_val == 0) {
+      r2_val <- NA
+      p_val <- NA
+    } else {
+      r2_val <- r2_val
+      p_val <- p_val
+    }
+    
+    if (is.na(r2_val)) {
+      formula_tmp <- NA
+    } else {
+      formula_tmp <- as.formula(trait_tmp_df$best_model[1])
+    }
+    
+    p <- ggplot(trait_tmp_df, aes(x = t_value, y = rs)) +
+      geom_point() +
+      stat_smooth(
+        method = "lm",
+        formula = formula_tmp,
+        aes(color = habitat_small_typo), 
+        linetype = if_else(p_val >= 0.05, "dashed", "solid")
+      ) +
+      scale_color_manual(values = setNames(trait_tmp_df$color,
+                                           trait_tmp_df$habitat_small_typo),
+                         guide = "none") +
+      labs(title = if_else(trait_tmp_df$author == "Sunday",
+                           paste0(trait_tmp_df$author, " et al., ", trait_tmp_df$year, " (meta-an.)"),
+                           paste0(trait_tmp_df$author, " et al., ", trait_tmp_df$year)),
+           x = if_else(trait_tmp_df$author == "Sunday", 
+                       paste0(trait_name, " (% max)"), trait_name),
+           y = if_else(trait_tmp_df$author == "Sunday", 
+                       "species richness (% max)", "species richness")) +
+      theme_classic() +
+      theme(legend.position = NULL, 
+            axis.text.x = element_text(size = 12, color = "black"),   
+            axis.text.y = element_text(size = 12, color = "black")) +
+      annotate(
+        geom = "label",  # Utilisation de "label" pour un fond autour du texte
+        x = Inf,
+        y = -Inf,
+        label = paste0("ES = ", rho_val, "\n", "R² = ", r2_val),
+        hjust = 1,
+        vjust = -1,
+        size = 4,
+        fontface = "italic",
+        color = "black",
+        fill = "white",  # Fond blanc
+        label.size = 0,
+        alpha = 0.9,     # Transparence du fond
+        label.padding = unit(0.5, "lines")
+      )
+    
+    print(p)
+    
+    plot_list[[id]] <- p
+    
+  }
+  return(plot_list)
+}
+
+map(traits, function(trait_name) {
+  
+  # appeler la fonction traitPlot pour chaque trait
+  plot_list <- traitPlot(trait_name)
+  
+  # créer la grille avec grid.arrange
+  grid_plot <- do.call(grid.arrange, c(plot_list, ncol = 3))
+  
+  if (length(plot_list) <= 3) {
+    ggsave(
+      here::here("02_FIGURES", paste0("suppmat_", trait_name, ".pdf")),
+      grid_plot,
+      width = 2000,
+      height = 600,
+      units = "px",
+      dpi = 210
+    )
+  } else if (length(plot_list) > 3 & length(plot_list) <= 6) {
+    ggsave(
+      here::here("02_FIGURES", paste0("suppmat_", trait_name, ".pdf")),
+      grid_plot,
+      width = 2000,
+      height = 1200,
+      units = "px",
+      dpi = 210
+    )
+  } else if (length(plot_list) > 6 & length(plot_list) <= 9) {
+    ggsave(
+      here::here("02_FIGURES", paste0("suppmat_", trait_name, ".pdf")),
+      grid_plot,
+      width = 2000,
+      height = 1800,
+      units = "px",
+      dpi = 210
+    )
+  } else if (length(plot_list) > 9 & length(plot_list) <= 12) {
+    ggsave(
+      here::here("02_FIGURES", paste0("suppmat_", trait_name, ".pdf")),
+      grid_plot,
+      width = 2000,
+      height = 2400,
+      units = "px",
+      dpi = 210
+    )
+  } else {
+    ggsave(
+      here::here("02_FIGURES", paste0("suppmat_", trait_name, ".pdf")),
+      grid_plot,
+      width = 2000,
+      height = 3000,
+      units = "px",
+      dpi = 210
+    )
+  }
+})
+
+```
+
+# Global meta-analysis
+
+```{r}
+trait_model_df_tmp <- trait_model_df %>%
+  # filter(trait %in% c("habitat cover", "density", "habitat biomass", "habitat area"))%>%
+  # filter(trait %in% c("habitat cover", "body fractal dimension", "density", "body volume", "body interstitial space", "habitat biomass", "habitat area", "habitat rugosity", "habitat volume", "stability"))%>%
+  filter(!trait %in% c("body volume")) %>%
+    mutate(trait_scale = if_else(trait %in% c("density", "habitat cover",
+                                              "habitat area", "habitat biomass",
+                                              "habitat branching", "habitat functional diversity",
+                                              "habitat rugosity", "habitat size",
+                                              "habitat taxonomic diversity", "habitat volume",
+                                              "stability"), "habitat traits", "individual traits")) %>%
+    mutate(trait = factor(trait, levels = unique(trait))) %>%
+    mutate(trait_scale = factor(trait_scale, levels = unique(trait_scale)))
+
+contrasts(trait_model_df_tmp$trait) <- contr.sum(length(levels(trait_model_df_tmp$trait)))
+
+random2 <- rma.mv(fz , var_fisher_z,
+            mods = ~ 1,
+            random = ~ 1|article_id,
+            data = trait_model_df_tmp) 
+
+(exp(2*random2$b[1])-1)/(exp(2*random2$b[1])+1)
+(exp(2*0.2867)-1)/(exp(2*0.2867)+1)
+(exp(2*0.6192)-1)/(exp(2*0.6192)+1)
+
+shapiro.test(resid(random2))
+bptest(resid(random2) ~ fitted(random2))
+
+funnel(random2, label = TRUE)
+
+model2 <- rma(fz , var_fisher_z,
+            mods = ~ trait,
+            data = trait_model_df_tmp) 
+
+regtest(model2) # pas de biais de symétrie
+# 
+fsn(x = fz, vi = var_fisher_z, data = trait_model_df_tmp) # Cela indique qu'il faudrait 18228 études supplémentaires (de taille et poids similaires aux études existantes) ayant un effet nul pour rendre le résultat global non significatif
+
+ggplot(data = data.frame(resid = residuals(random2)), aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line(linetype = 'dashed', color = '#ef8a47', size = 1) +
+  labs(
+    title = "Residual QQ Plot"
+  )
+
+fitted_val <- predict(random2)
+
+data_fit <- data.frame(fitted = fitted_val$pred,
+                       residual = residuals(random2))
+
+ggplot(data = data_fit, aes(x = fitted, y = residual)) +
+    geom_point(color = '#203147') +
+    geom_hline(yintercept = 0, linetype = "dashed", color = '#ef8a47', size = 1) +
+    xlab("fitted values") +
+    ylab("residuals") +
+    labs(title = "Fitted Values vs Residuals")
+```
+
+# Plot
+
+```{r}
+study_counts <- trait_model_df %>%
+  group_by(trait) %>%
+  summarise(n_studies = n()) %>%
+  ungroup()
+
+article_count <- trait_model_df %>%
+  dplyr::select(article_id, trait) %>%
+  distinct() %>%
+  group_by(trait) %>%
+  summarise(n_article = n()) %>%
+  ungroup()
+
+trait_model_df <- trait_model_df %>%
+  left_join(study_counts) %>%
+  left_join(article_count) %>%
+  arrange(desc(n_studies), desc(n_article)) %>%
+  mutate(label_n = paste0("N = ", n_studies, " (", n_article, ")"))
+
+trait_filtered_df <- trait_model_df %>%
+  dplyr::select(trait, habitat_small_typo, cor, tot,label_n)
+
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "mussel"] <- "#536c94"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "reef-building worm"] <- "#e4c600"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "tube-building worm"] <- "#edd95d"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "oyster"] <- "#b9b7af"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "other invertebrate"] <- "#91a5c1"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "hard coral"] <- "#f81118"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "coralline algae"] <- "#f5265c"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "canopy-forming algae"] <- "#c37e5f"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "turfing red algae"] <- "#fa85a3"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "seagrass"] <- "#64b432"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "salt marsh"] <- "#10961c"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "mangrove"] <- "#284b2b"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "complex green algae"] <- "#5ada0d"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "sponge"] <- "#F28C28"
+trait_filtered_df$color[trait_filtered_df$habitat_small_typo == "opportunistic green algae"] <- "#9FE2BF"
+
+trait_filtered_df$trait <- factor(trait_filtered_df$trait,
+                          levels = rev(c("body size", "body mass", "body volume", "body area",
+                                     "body fractal dimension", "body interstitial space",
+                                     "density", "habitat cover", "habitat biomass",
+                                     "habitat area", "habitat size", "habitat taxonomic diversity",
+                                     "habitat rugosity", "habitat volume", "habitat branching",
+                                     "habitat functional diversity", "stability")))
+
+p <- ggplot(data = trait_filtered_df) +
+  ggbeeswarm::geom_quasirandom(aes(x = cor, y = trait, size = pmin(tot, 200), color = habitat_small_typo), 
+             shape = 16, alpha = 0.6) +
+  scale_color_manual(values = setNames(trait_filtered_df$color, trait_filtered_df$habitat_small_typo)) +
+  scale_fill_identity() +
+  theme_classic() +
+      scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+geom_text(
+  aes(
+    x = 1.5,
+    y = trait,
+    label = paste0(
+      "italic(N) == ",
+      sub("N = ([0-9]+) \\(([0-9]+)\\)", 
+          "\\1 * ' (' * \\2 * ')'", 
+          label_n)
+    ),
+    hjust = 0,
+    vjust = 0.4
+  ),
+  parse = TRUE,
+  size = 4
+)+
+  labs(x = "Effect size (Spearman's rank correlation)", y = NULL, size = "sample size") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  theme(axis.text.x = element_text(size = 12, color = "black"),   
+        axis.text.y = element_text(size = 12, color = "black"))
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_8_A.pdf"), p, width = 5000, height = 1200, units = "px", dpi = 210,
+device = cairo_pdf)
+```

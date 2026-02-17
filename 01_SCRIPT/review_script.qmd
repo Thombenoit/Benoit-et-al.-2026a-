@@ -1,0 +1,3362 @@
+---
+title: "review script"
+author: "T. Benoit"
+format: html
+editor: visual
+echo: FALSE
+---
+
+# Preprocessings
+
+```{r, echo = FALSE}
+###################
+## Packages used ##
+###################
+
+# install.packages("here")
+# install.packages("tidyverse")
+# install.packages("dplyr")
+# install.packages("readxl")
+# install.packages("openxlsx")
+# install.packages("magrittr")
+# install.packages("dplyr")
+# install.packages("tidyr")
+# install.packages("ggraph")
+# install.packages("tidyr")
+# install.packages("igraph")
+# install.packages("tidyverse")
+# install.packages("RColorBrewer")
+# install.packages("ggplot2")
+# install.packages("terra")
+# install.packages("sf")
+# install.packages("BiodiversityR")
+# install.packages("FactoMineR")
+# install.packages("factoextra")
+# install.packages("ggalluvial")
+# install.packages("ggside")
+# install.packages("ggforce")
+# install.packages("ade4")
+# install.packages("scatterpie")
+# install.packages("ggpattern")
+# install.packages("patchwork")
+# install.packages("gridExtra")
+# devtools::install_github("nicolash2/ggdendroplot")
+# install.packages("fmsb")
+
+library(here)
+library(tidyverse)
+library(dplyr)
+library(openxlsx)
+library(readxl)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library(ggraph)
+library(igraph)
+library(tidyverse)
+library(RColorBrewer)
+library(ggplot2)
+library(terra)
+library(sf)
+library(BiodiversityR)
+library(FactoMineR)
+library(factoextra)
+library(ggalluvial)
+library(ggside)
+library(ggforce)
+library(ade4)
+library(scatterpie)
+library(ggpattern)
+library(patchwork)
+library(gridExtra)
+library(ggdendroplot)
+library(fmsb)
+
+##################
+## Loading data ##
+##################
+
+gdl_df <- read_excel(here::here("00_DATA", "review_data.xlsx"), na = "NA")
+
+n <- length(unique(gdl_df$title))
+print(paste0(n, " articles after title and abstract screaning"))
+
+gdl_df <- filter(gdl_df, !is.na(title)) %>% # drop row with only NA
+  filter(importance == "1" | is.na(importance)) # drop no relevant articles
+gdl_df <- filter(gdl_df, title != "Multiple foundation species shape benthic habitat islands")
+n <- length(unique(gdl_df$title))
+print(paste0(n, " articles included in the review"))
+
+print(paste0(140, " articles excluded after full text reading"))
+# for exclusion criterion see column "overall_com"
+
+gdl_df <- unite(gdl_df, id_article, title, author, year, sep = "_")
+
+###############
+## Formating ##
+###############
+
+gdl_df <- filter(gdl_df, !habitat_trait %in% c("distance to the reef", "size frequency",
+                                              "community-weighted average height", 
+                                              "spatial autocorrelation", "distance to the interior",
+                                              "distance from bed", "location within bed",
+                                              "position in the bed", "position on the reef",
+                                              "sum mussel lengths"))
+
+gdl_df$fauna_metric[is.na(gdl_df$fauna_metric) & !is.na(gdl_df$metric_com)] <- "other"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "coralline algae"] <- "coralline algae bed"
+gdl_df$habitat_medium_typo[gdl_df$habitat_small_typo == "coralline algae bed"] <- "red algae"
+gdl_df$habitat_medium_typo[gdl_df$habitat_small_typo == "other brown algae bed"] <- "brown algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "complexe green algae"] <- "complex green algae"
+
+gdl_df$habitat_large_typo[gdl_df$habitat_large_typo == "macroalgae bed"] <- "macroalgae"
+gdl_df$habitat_large_typo[gdl_df$habitat_large_typo == "invertebrate structure"] <- "invertebrate"
+gdl_df$habitat_large_typo[gdl_df$habitat_large_typo == "mixed biogenic habitat"] <- "mixed species"
+
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "mixed macroalgae bed"] <- "mixed macroalgae"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "mixed biogenic habitat"] <- "mixed species"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "mollusc bed"] <- "mollusc"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "sponge bed"] <- "sponge"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "seagrass meadow"] <- "seagrass"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "other invertebrate bed"] <- "other invertebrate"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "mixed invertebrate bed"] <- "mixed invertebrates"
+gdl_df$habitat_medium_typo[gdl_df$habitat_medium_typo == "coral reef"] <- "coral"
+
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mussel bed"] <- "mussel"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "coralline algae bed"] <- "coralline algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "oyster reef"] <- "oyster"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "turfing red algae bed"] <- "turfing red algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed invertebrate bed"] <- "mixed invertebrates"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "other invertebrate bed"] <- "other invertebrate"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "other brown algae bed"] <- "other brown algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed macroalgae bed"] <- "mixed macroalgae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed macroalgae bed"] <- "mixed macroalgae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "seagrass meadow"] <- "seagrass"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "soft coral reef"] <- "soft coral"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "hard coral reef"] <- "hard coral"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed biogenic habitat"] <- "mixed species"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "sponge bed"] <- "sponge"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "foliose red algae bed"] <- "foliose red algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed red algae bed"] <- "mixed red algae"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "other mollusc bed"] <- "other mollusc"
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == "mixed mollusc bed"] <- "mixed mollusc"
+
+gdl_df$habitat_small_typo[gdl_df$habitat_small_typo == unique(gdl_df$habitat_small_typo)[22]] <- unique(gdl_df$habitat_small_typo)[24]
+
+gdl_df$trait_small_typo[gdl_df$trait_small_typo == "body exent"] <- "body extent"
+
+gdl_df$trait_small_typo[gdl_df$trait_small_typo == "body form" & 
+                            gdl_df$trait_finest_typo == "body weight"] <- "body extent"
+
+gdl_df$trait_finest_typo[gdl_df$trait_finest_typo == "body weight"] <- "body mass"
+```
+
+# Foundation species classification table
+
+```{r}
+habitat_df <- select(gdl_df, c(habitat_sp, habitat_large_typo, habitat_medium_typo, habitat_small_typo)) %>%
+  filter(!is.na(habitat_sp)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  distinct() 
+
+habitat_df <- habitat_df %>%
+  arrange(habitat_large_typo, habitat_medium_typo, habitat_small_typo, habitat_sp)
+
+colnames(habitat_df) <- c("foundation species", "first order",
+                          "second order", "foundation species group")
+
+write.xlsx(habitat_df, file = here::here("03_FIGURES_VF", "table_S1.xlsx"))
+```
+
+# Traits classification table
+
+```{r}
+tmp_gdl <- gdl_df %>%
+  separate(id_article, c("title", "author", "year"), sep = "_")
+
+trait_df <- select(tmp_gdl, c(title, author, year, habitat_small_typo, habitat_trait,
+                              trait_large_typo, trait_medium_typo, trait_small_typo,
+                              trait_finest_typo, trait_scale_measure)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!is.na(habitat_trait)) %>%
+  filter(!is.na(trait_large_typo)) %>%
+  filter(!is.na(trait_medium_typo)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(!is.na(trait_scale_measure)) %>%
+  distinct() 
+
+trait_df <- trait_df %>%
+  arrange(habitat_small_typo, trait_large_typo, trait_medium_typo, trait_small_typo, 
+          trait_finest_typo, trait_scale_measure, habitat_trait)
+
+colnames(trait_df) <- c("article title", "first author", "year", "foundation species", 
+                        "raw trait", "first order",
+                          "second order", "third order", 
+                          "trait group", "measurement scale")
+
+# write.xlsx(trait_df, file = here::here("03_FIGURES_VF", "table_S2.xlsx"))
+```
+
+# Figures
+
+## Main text
+
+### Figure 3
+
+```{r}
+##################
+## Figure 3 (A) ##
+##################
+
+habitat_df <- select(gdl_df, c(id_article, habitat, habitat_sp, habitat_large_typo, habitat_medium_typo, habitat_small_typo)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  distinct() 
+
+freqh_df <- filter(gdl_df, !is.na(habitat)) %>%
+  select(c(id_article, habitat_large_typo, habitat_medium_typo, habitat_small_typo, habitat, habitat_sp)) %>%
+  distinct() %>% 
+  separate(id_article, c("title", "author", "year"), sep = "_") %>%
+  filter(year != "2023")
+
+nbart_df <- freqh_df %>%
+  select(c(title, year)) %>%
+  distinct()
+nbart_df <- data.frame(table(nbart_df$year))
+colnames(nbart_df) <- c("year", "freq")
+nbart_df$year <- as.numeric(as.character(nbart_df$year))
+
+freqh_df <- data.frame(table(freqh_df$year, freqh_df$habitat_large_typo))
+colnames(freqh_df) <- c("year", "habitat", "freq")
+freqh_df$year <- as.numeric(as.character(freqh_df$year))
+
+adjusted_freqh_df_list <- list()
+
+for (i in unique(freqh_df$habitat)) {
+  habitat_df <- freqh_df %>%
+    filter(habitat == i) 
+  loess_model <- loess(freq ~ year, data = habitat_df)
+  habitat_df$freq_pred <- predict(loess_model, newdata = habitat_df)
+  habitat_df$freq_pred <- pmax(habitat_df$freq_pred, 0)
+  adjusted_freqh_df_list[[i]] <- habitat_df
+}
+
+adjusted_freqh_df <- bind_rows(adjusted_freqh_df_list)
+
+adjusted_freqh_df$adjusted_nbart<- NA
+nbart_df <- nbart_df %>%
+  group_by(year)
+
+adjusted_freqh_df$habitat <- factor(adjusted_freqh_df$habitat, levels = c("saltwater plant",
+                                                                          "macroalgae",
+                                                                          "invertebrate",
+                                                                          "mixed species"))
+plot_year <- ggplot() +
+  geom_histogram(data = nbart_df, aes(x = year, y = freq), 
+                 fill = alpha("#3d405b", 0.3), 
+                 stat = "identity", adjust = 1.5, width = 1) +
+  scale_fill_manual(values = "black", guide = FALSE) +
+  geom_line(data = adjusted_freqh_df, aes(x = year, y = freq_pred, color = habitat), size = 1) +
+  scale_color_manual(values = c("invertebrate" = "#edd95d", "macroalgae" = "#c37e5e",
+                                "saltwater plant" = "#519558",
+                                "mixed species" = "#72a1c4")) +
+  labs(y = "Article frequency", x = "Year") +
+  theme_classic() +
+  scale_x_continuous(expand = c(0, 0), breaks = c(1980, 1990, 2000, 2010, 2010, 2020)) +
+  scale_y_continuous(expand = c(0, 0),  breaks = c(0, 5, 10, 15, 20, 25, 30)) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "none",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+  ) +
+  coord_cartesian(ylim = c(0, 30)) +
+  guides(color = guide_legend(nrow = 2))
+
+plot_year
+
+# ggsave(here::here("02_FIGURES", "figure_3_A.pdf"), plot_year, width = 2500, height = 1600, units = "px", dpi = 210)
+
+
+##################
+## Figure 3 (B) ##
+##################
+
+prep_df <- gdl_df %>%
+  select(id_article, study_type) %>%
+  filter(!is.na(study_type)) %>%
+  distinct() %>%
+  mutate(study_type = if_else(study_type == "meta analysis", "meta-analysis", study_type))
+
+type_count_df <- data.frame(table(prep_df$study_type))
+colnames(type_count_df) <- c("type", "count")
+
+# % obs
+256*100/sum(type_count_df$count)
+
+# % field exp
+82*100/sum(type_count_df$count)
+
+type_count_pool <- type_count_df[order(type_count_df$count), ]
+type_count_pool$type <- factor(type_count_pool$type, levels = type_count_pool$type)
+
+plot_type <- ggplot(type_count_pool, aes(y = type, 
+                               x = count)) +
+  geom_bar(stat="identity", position = "identity", colour = "black", fill = "#3d405b", alpha = 0.3) +
+  geom_text(aes(label = ..x..), hjust = -0.2, vjust = 0.5, color = "black", size = 4) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  labs(y = NULL, x = "Number of studies per approach", fill = NULL) +
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), limits = c(0,290), breaks = c(0, 50, 100, 150, 200, 250)) +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+  )
+
+plot_type
+
+##################
+## Figure 3 (C) ##
+##################
+
+gdl_distri_df <- select(gdl_df, c(id_article, realm)) %>%
+  filter(!is.na(realm)) %>% 
+  distinct() %>% 
+  separate_rows(realm, sep = ";")
+
+
+count_distri_df <- data.frame(table(gdl_distri_df$realm))
+colnames(count_distri_df) <- c("realm", "count")
+
+# % temperate
+(47+143+48+27+6)*100/sum(count_distri_df$count)
+
+# % Temperate Northern Atlantic
+(139)*100/sum(count_distri_df$count)
+
+# % tropical
+(9+22+1+7)*100/sum(count_distri_df$count)
+
+# % polar
+(5+2)*100/sum(count_distri_df$count)
+
+count_distri_df <- count_distri_df[order(count_distri_df$count), ]
+levels <- as.character(count_distri_df$realm)
+count_distri_df$climat <- "temperate"
+count_distri_df$climat[count_distri_df$realm %in% c("Tropical Eastern Pacific", 
+                                                    "Western Indo-Pacific",
+                                                    "Central Indo-Pacific", 
+                                                    "Tropical Atlantic")] <- "tropical"
+count_distri_df$climat[count_distri_df$realm %in% c("Arctic", 
+                                                    "Southern Ocean")] <- "polar"
+count_distri_df$color <- NA
+count_distri_df$color[count_distri_df$climat == "temperate"] <- "#81b29a"
+count_distri_df$color[count_distri_df$climat == "tropical"] <- "#e07a5f"
+count_distri_df$color[count_distri_df$climat == "polar"] <- "#3d405b"
+
+count_distri_df$border_color <- count_distri_df$color
+count_distri_df$border_color[count_distri_df$border_color == "#81b29a"] <- "#5b7d6e"
+count_distri_df$border_color[count_distri_df$border_color == "#e07a5f"] <- "#a3543d"
+count_distri_df$border_color[count_distri_df$border_color == "#3d405b"] <- "#2a2d3f"
+
+plot_realm <- ggplot(count_distri_df, aes(x = count, y = factor(realm, levels = levels), fill = color, color = border_color)) +
+  geom_bar(stat="identity", position = "identity", size = 1) +
+  geom_text(aes(label = ..x..), hjust = -0.2, vjust = 0.5, color = "black", size = 4) +
+  labs(y = NULL, x = "Article frequency", fill = NULL) +
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), limits=c(0,160),
+                     breaks = c(0, 25, 50, 75, 100, 125, 150)) +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-")             
+    }
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14), color="black",  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+) +
+  scale_fill_identity() +
+  scale_color_identity()
+
+plot_realm
+
+ggsave(here::here("02_FIGURES", "figure_S5.1.pdf"), plot_realm, width = 1500, height = 1000, units = "px", dpi = 210,
+  device = cairo_pdf)
+
+##################
+## Figure 3 (D) ##
+##################
+
+habitat_df <- select(gdl_df, c(id_article, habitat, habitat_sp, habitat_large_typo, habitat_medium_typo, habitat_small_typo)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  distinct()
+
+sp_df <- data_frame(habitat_df$habitat_sp) %>%
+  filter(!is.na(habitat_df$habitat_sp)) %>%
+  separate_rows(`habitat_df$habitat_sp`, sep = ";") %>%
+  distinct()
+
+# number of foundation species
+nrow(sp_df)
+
+large_df <- data.frame(table(habitat_df$habitat_large_typo))
+colnames(large_df) <- c("habitat_large_typo", "count")
+
+# % invertebrate
+227*100/sum(large_df$count)
+
+# % macralgae
+226*100/sum(large_df$count)
+
+# % saltwater plants
+108*100/sum(large_df$count)
+
+# % mixed
+12*100/sum(large_df$count)
+
+count_df <- data.frame(table(habitat_df$habitat_small_typo))
+colnames(count_df) <- c("habitat_small_typo", "count")
+
+count_df <- count_df[order(count_df$count), ]
+count_df$habitat_small_typo <- factor(count_df$habitat_small_typo, levels = unique(count_df$habitat_small_typo))
+order_habitat <- unique(count_df$habitat_small_typo)
+count_df$color <- NA
+count_df$color[count_df$habitat_small_typo %in% c("mixed invertebrates", "mixed mollusc",
+                                                  "other mollusc", "reef-building worm",
+                                                  "tube-building worm", "sponge", "soft coral",
+                                                  "other invertebrate", "hard coral", 
+                                                  "oyster", "mussel"
+                                                  )] <- "#edd95d"
+count_df$color[count_df$habitat_small_typo %in% c("mixed red algae", "foliose red algae",
+                                                  "opportunistic green algae", "other brown algae",
+                                                  "complex green algae", "coralline algae",
+                                                  "mixed macroalgae", "turfing red algae", 
+                                                  "canopy-forming algae")] <- "#c37e5e"
+count_df$color[count_df$habitat_small_typo %in% c("other saltwater plant", "mangrove", "salt marsh",
+                                                  "seagrass")] <- "#519558"
+count_df$color[count_df$habitat_small_typo %in% c("mixed species")] <- "#72a1c4"
+
+
+count_df$border_color <- count_df$color
+count_df$border_color[count_df$border_color == "#edd95d"] <- "#bda60a"
+count_df$border_color[count_df$border_color == "#c37e5e"] <- "#8f5a40"
+count_df$border_color[count_df$border_color == "#519558"] <- "#386b3e"
+count_df$border_color[count_df$border_color == "#72a1c4"] <- "#507b9b"
+
+plot_habitat <- ggplot(count_df, aes(x = count, y = habitat_small_typo, fill = color, color = border_color)) +
+  geom_bar(stat = "identity", position = "identity", size = 0.5) +  
+  geom_text(aes(label = count), hjust = -0.2, vjust = 0.5, color = "black", size = 4) +
+  labs(y = NULL, x = "Article frequency", fill = NULL) +
+  theme_classic() +
+  scale_x_continuous(expand = c(0, 0), limits = c(0, 130), 
+                     breaks = c(0, 25, 50, 75, 100, 125)) +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+  ) +
+  scale_fill_identity() +
+  scale_color_identity()
+
+plot_habitat
+
+##############
+## Figure 3 ##
+##############
+
+left_plot <- cowplot::plot_grid(plot_year, plot_realm, ncol = 1, rel_heights = c(0.7, 1.2))
+left_plot
+
+right_plot <- cowplot::plot_grid(plot_type, plot_habitat, ncol = 1, rel_heights = c(0.7, 1.2), align = "v")
+right_plot
+
+merge_plot <- cowplot::plot_grid(left_plot, right_plot, ncol = 2)
+merge_plot
+
+left_tmp <- cowplot::plot_grid(plot_year, plot_type, ncol = 1, align = "v")
+
+merge_tmp <- cowplot::plot_grid(left_tmp, plot_habitat, ncol = 2, align = "h", rel_heights = c(1.2, 0.8))
+
+merge_tmp
+
+# plot_habitat <- ggplot(count_df, aes(y = count, x = factor(habitat_small_typo, levels = rev(levels(habitat_small_typo))), fill = color, color = border_color)) +
+#   geom_bar(stat = "identity", position = "identity", size = 1) +
+#   geom_text(aes(label = count), hjust = 0.5, vjust = -0.5, color = "black", size = 4) +
+#   labs(x = NULL, y = "article frequency", fill = NULL) +
+#   theme_classic() +
+#   scale_y_continuous(expand = c(0, 0), limits = c(0, 130),
+#                      breaks = c(0, 25, 50, 75, 100, 125)) +
+#   theme(
+#     legend.title = element_blank(),
+#     legend.position = "bottom",
+#     legend.text = element_text(size = 12),
+#     axis.title.x = element_text(size = 14, color="black"),
+#     axis.title.y = element_text(size = 14, color="black"),
+#     axis.text.x = element_text(size = 12, color="black", angle = 90, hjust = 1, vjust = 0.5),
+#     axis.text.y = element_text(size = 12, color="black")
+#   ) +
+#   scale_fill_identity() +
+#   scale_color_identity()
+# 
+# plot_habitat
+# 
+# tmp_plot <- cowplot::plot_grid(plot_year, plot_habitat, ncol = 2, align = "h")
+# tmp_plot
+
+# ggsave(here::here("02_FIGURES", "figure_3.pdf"), merge_plot, width = 2500, height = 2000, units = "px", dpi = 210)
+ggsave(here::here("02_FIGURES", "figure_3.pdf"), merge_tmp, width = 2500, height = 1100, units = "px", dpi = 210,
+  device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure 4
+
+```{r}
+##################
+## Figure 4 (A) ##
+##################
+
+spext_df <- gdl_df %>%
+  filter(!is.na(spatial_extent)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, spatial_extent, habitat_large_typo, habitat_small_typo, habitat_sp) %>%
+  distinct() %>%
+  select(habitat_large_typo, spatial_extent)
+
+total <- nrow(spext_df)
+
+# % small extent
+nrow(subset(spext_df, spatial_extent <= 100))*100/total
+
+# % large extent
+nrow(subset(spext_df, spatial_extent > 100))*100/total
+
+spext_df$label <- " "
+
+p1 <- ggplot(spext_df, aes(y = label, x = spatial_extent)) +
+  geom_jitter(aes(color = habitat_large_typo), shape=16, position=position_jitter(height = 0.34,
+                                                                                  width = 0.2), alpha = 0.5) + 
+  geom_boxplot(outlier.shape = NA, alpha = 0) +
+  scale_color_manual(values = c("invertebrate" = "#edd95d", "macroalgae" = "#c37e5e",
+                                "saltwater plant" = "#519558",
+                                "mixed species" = "#72a1c4")) +
+  scale_x_continuous(expand = c(0, 0), trans = 'log1p', breaks = c(0, 10, 100, 1000), 
+                     limits = c(0, max(spext_df$spatial_extent) + 1000), oob = scales::squish) +
+  labs(x = expression("Spatial extent (log scale, in km)"), y = NULL, color = NULL) +
+  theme_classic() +
+  theme(legend.position = "none",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+)
+
+p1
+
+##################
+## Figure 4 (B) ##
+##################
+
+spres_df <- gdl_df %>%
+  filter(!is.na(spatial_resolution)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(habitat_trait != "presence absence") %>%
+  select(id_article, spatial_resolution, habitat_large_typo, habitat_small_typo, habitat_trait, habitat_sp)%>%
+  distinct() %>%
+  select(habitat_large_typo, spatial_resolution)
+
+total <- nrow(spres_df)
+
+# % small resolution
+nrow(subset(spres_df, spatial_resolution <= 1))*100/total
+
+spres_df$label <- " "
+
+p2 <- ggplot(spres_df, aes(x = spatial_resolution, y = label)) +
+  geom_jitter(aes(color = habitat_large_typo), shape=16, position=position_jitter(height = 0.34,
+                                                                                  width = 0.2), alpha = 0.5) +
+    geom_boxplot(outlier.shape = NA, alpha = 0) +
+  scale_color_manual(values = c("invertebrate" = "#edd95d", "macroalgae" = "#c37e5e",
+                                "saltwater plant" = "#519558",
+                                "mixed species" = "#72a1c4")) +
+  scale_x_continuous(expand = c(0,0),trans = 'log1p', breaks = c(0, 1, 10, 100, 1000),
+                     limits = c(0, max(spres_df$spatial_resolution) + 500), oob = scales::squish) +
+  labs(x = expression("Spatial resolution (log scale, in " * m^2 * ")"), y = NULL, color = NULL) +
+  theme_classic() +
+  theme(legend.position = "none",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+)
+
+p2
+
+##################
+## Figure 4 (C) ##
+##################
+
+tempext_df <- gdl_df %>%
+  filter(!is.na(temporal_extent)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, temporal_extent, habitat_large_typo, habitat_small_typo, habitat_trait, habitat_sp) %>%
+  distinct() %>%
+  select(habitat_large_typo, temporal_extent)
+
+total <- nrow(tempext_df)
+
+# % small resolution
+nrow(subset(tempext_df, temporal_extent <= 5))*100/total
+
+tempext_df$label <- " "
+
+p3 <- ggplot(tempext_df, aes(x = temporal_extent, y = label)) +
+  geom_jitter(aes(color = habitat_large_typo), shape=16, position=position_jitter(height = 0.34,
+                                                                                  width = 0.2), alpha = 0.5) +
+  geom_boxplot(outlier.shape = NA, alpha = 0) +
+  scale_color_manual(values = c("invertebrate" = "#edd95d", "macroalgae" = "#c37e5e",
+                                "saltwater plant" = "#519558",
+                                "mixed species" = "#72a1c4")) +
+  scale_x_continuous(expand = c(0,0), trans = 'log1p', limits = c(0, max(tempext_df$temporal_extent)+10), oob = scales::squish, breaks = c(0,1,5,10,20,40)) +
+  labs(y = NULL, x = expression("Temporal extent (log scale, in year)"), color = NULL) +
+  theme_classic() +
+  theme(legend.position = "none",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+)
+
+p3
+
+##################
+## Figure 4 (D) ##
+##################
+
+tempres_df <- gdl_df %>%
+  filter(!is.na(temporal_resolution)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, study_type, temporal_resolution) %>%
+  distinct()
+
+tempres_df$temporal_resolution[tempres_df$temporal_resolution == "other"] <- "irregular"
+tempres_df$method <- NA
+tempres_df$method[tempres_df$study_type == "observation"] <- "Observational"
+tempres_df$method[tempres_df$study_type %in% c("field experiment", "laboratory experiment")] <- "Experimental"
+tempres_df <- tempres_df %>%
+  filter(!is.na(tempres_df$method)) %>%
+  select(method, temporal_resolution)
+
+
+
+p4 <- ggplot(tempres_df, aes(y = method, 
+                             fill = factor(temporal_resolution, 
+                                           levels = rev(c("snapshot", "hour", 
+                                           "day", "week", "month", "season",
+                                           "year", "irregular", "no data"))))) +
+  geom_bar(position = "fill", stat = "count") +
+  labs(y = NULL, x = "Temporal resolution frequency", fill = NULL) +
+  scale_fill_manual(values = c("snapshot" = "#023047",  "hour" = "#1e6091","day" = "#168aad", "week" = "#34a0a4",
+                               "month" = "#52b69a", "season" = "#76c893", "year" = "#99d98c", 
+                               "irregular" = "grey90", "no data" = "grey95"),  
+  labels = function(x) {
+    x %>%
+      stringr::str_to_sentence()
+  }
+) +  
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+    theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+) + 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+p4
+
+##############
+## Figure 4 ##
+##############
+
+top_plot <- cowplot::plot_grid(p3, p1, p2, ncol = 3, align = "h") # Tricks for perfect alignment
+top_plot
+
+bot_plot <- cowplot::plot_grid(p3, p3, p4, ncol = 3, align = "h")
+bot_plot
+
+merge_plot <- cowplot::plot_grid(top_plot, bot_plot, ncol = 1, rel_heights = c(0.75, 1.4))
+merge_plot
+
+ggsave(here::here("02_FIGURES", "figure_4.pdf"), merge_plot, width = 2500, height = 800, units = "px", dpi = 210,
+  device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure 5
+
+```{r}
+##################
+## Figure 5 (A) ##
+##################
+
+fauna_df <- select(gdl_df, c(id_article, habitat, habitat_sp, habitat_large_typo,
+                            habitat_medium_typo, habitat_small_typo,
+                            epifauna_pa, infauna_pa, fish_pa, all_pa, functional_group_pa,
+                            taxo_group_pa, species_scale_pa, fauna_com)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  filter(!(is.na(all_pa) & is.na(functional_group_pa) & is.na(taxo_group_pa)
+           & is.na(species_scale_pa))) %>%
+  distinct()
+
+fauna_df$epifauna_pa[fauna_df$epifauna_pa == "presence"] <- "epifauna"
+fauna_df$infauna_pa[fauna_df$infauna_pa == "presence"] <- "infauna"
+
+fauna_df$fish_pa[fauna_df$fish_pa == "presence"] <- "fish"
+
+fauna_df <- fauna_df %>%
+  pivot_longer(cols = c(epifauna_pa, infauna_pa, fish_pa),
+               names_to = "fauna_categories",
+               values_to = "fauna") %>%
+  drop_na(fauna) %>%
+  select(-fauna_categories)
+
+fauna_count_df <- data.frame(table(fauna_df$habitat_small_typo, fauna_df$fauna))
+colnames(fauna_count_df) <- c("habitat", "fauna", "count")
+
+# % epifauna
+tmp_df <- fauna_count_df %>%
+  group_by(fauna) %>%
+  mutate(total = sum(count)) %>%
+  ungroup() %>%
+  select(c("fauna", "total")) %>%
+  distinct()
+854*100/sum(tmp_df$total)
+
+fauna_count_df <- fauna_count_df %>%
+  group_by(habitat) %>%
+  mutate(prop = count/sum(count)) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()
+
+fauna_count_df$habitat <- paste0(fauna_count_df$habitat, " (N = ", fauna_count_df$total, ")")
+
+fauna_count_df <- data.frame(table(fauna_df$habitat_small_typo, fauna_df$fauna))
+colnames(fauna_count_df) <- c("habitat_small_typo", "fauna", "count")
+fauna_count_df <- fauna_count_df %>%
+  group_by(habitat_small_typo) %>%
+  mutate(prop = count/sum(count)) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()
+
+fauna_df <- left_join(fauna_df, fauna_count_df, by = "habitat_small_typo")
+
+fauna_df$habitat_label <- paste0(fauna_df$habitat_small_typo, " (N = ", fauna_df$total, ")")
+
+habitat_order <- c("hard coral", "opportunistic green algae", "soft coral", "sponge", "other invertebrate", "oyster", "mixed macroalgae", "coralline algae", "canopy-forming algae", "other brown algae", "mixed red algae", "foliose red algae", "mixed invertebrates", "turfing red algae", "other saltwater plant", "other mollusc", "mussel", "mixed mollusc", "reef-building worm", "mangrove", "seagrass", "complex green algae", "mixed species", "salt marsh", "tube-building worm")
+
+fauna_df$habitat_small_typo <- factor(fauna_df$habitat_small_typo, levels = habitat_order)
+fauna_df$fauna.x <- factor(fauna_df$fauna.x, levels = rev(c("epifauna", "infauna", "fish")))
+
+fauna_df <- fauna_df %>%
+  arrange(habitat_small_typo)
+
+fauna_df$habitat_label <- factor(fauna_df$habitat_label, levels = unique(fauna_df$habitat_label))
+
+p1 <- ggplot(fauna_df, aes(y = habitat_label, fill = fauna.x)) +
+  geom_bar(position = "fill", stat = "count") +
+  labs(y = NULL, x = "Proportion of faunal compartments", fill = NULL) +
+  scale_fill_manual(values = c("epifauna" = "#3d405b",  "infauna" = "#e07a5f","fish" = "#81b29a"),
+                    guide = "none") +
+scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace_all("[–—]", "-") %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) %>%
+      stringr::str_match("^(.*) \\(N = ([0-9]+)\\)$") %>%
+      apply(1, function(m) {
+        habitat <- m[2]
+        n_val   <- m[3]
+        bquote(.(habitat)~" ("*italic(N)==" "*.(n_val)*")")
+      })
+  }
+) +
+  theme_classic() +
+  theme(legend.position = "none",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color="black"),  
+    axis.title.y = element_text(size = 14, color="black"),  
+    axis.text.x = element_text(size = 12, color="black"),   
+    axis.text.y = element_text(size = 12, color="black")
+) + 
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x))
+p1
+
+##################
+## Figure 5 (B) ##
+##################
+
+fauna_df <- select(gdl_df, c(id_article, habitat, habitat_sp, habitat_large_typo,
+                            habitat_medium_typo, habitat_small_typo,
+                            epifauna_pa, infauna_pa, fish_pa, all_pa, functional_group_pa,
+                            taxo_group_pa, species_scale_pa, fauna_com, fauna_metric)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  filter(!(is.na(all_pa) & is.na(functional_group_pa) & is.na(taxo_group_pa)
+           & is.na(species_scale_pa))) %>%
+  filter(!is.na(fauna_metric)) %>%
+  distinct()
+
+fauna_df$epifauna_pa[fauna_df$epifauna_pa == "presence"] <- "epifauna"
+fauna_df$infauna_pa[fauna_df$infauna_pa == "presence"] <- "infauna"
+fauna_df$fish_pa[fauna_df$fish_pa == "presence"] <- "fish"
+
+fauna_df <- fauna_df %>%
+  pivot_longer(cols = c(epifauna_pa, infauna_pa, fish_pa),
+               names_to = "fauna_categories",
+               values_to = "fauna") %>%
+  drop_na(fauna) %>%
+  select(-fauna_categories)
+
+fauna_df$all_pa[fauna_df$all_pa == "presence"] <- "overall macrofauna"
+fauna_df$functional_group_pa[fauna_df$functional_group_pa == "presence"] <- "functional groups"
+fauna_df$taxo_group_pa[fauna_df$taxo_group_pa == "presence"] <- "taxonomic groups"
+fauna_df$species_scale_pa[fauna_df$species_scale_pa == "presence"] <- "species centred"
+fauna_df <- fauna_df %>%
+  pivot_longer(cols = c(all_pa, functional_group_pa, taxo_group_pa, species_scale_pa),
+               names_to = "fauna_scale",
+               values_to = "fauna_cate") %>%
+  drop_na(fauna_cate) %>%
+  select(-fauna_scale) %>%
+  select(habitat_small_typo, fauna, fauna_cate, fauna_metric)
+
+fauna_df$fauna_metric[!(fauna_df$fauna_metric %in% c("abundance", "taxo alpha div",
+                                                   "taxo beta div"))] <- "other"
+
+tmp_df <- data.frame(table(fauna_df$fauna_metric))
+
+# % abundance
+1078*100/sum(tmp_df$Freq)
+
+# % taxo alpha div
+545*100/sum(tmp_df$Freq)
+
+# % taxo beta div
+517*100/sum(tmp_df$Freq)
+
+# % other
+356*100/sum(tmp_df$Freq)
+
+fauna_df$fauna <- factor(fauna_df$fauna, levels = c("epifauna", "infauna", "fish"))
+fauna_df$fauna_cate <- factor(fauna_df$fauna_cate, levels =c("overall macrofauna", 
+                                                         "species centred", "functional groups", 
+                                                         "taxonomic groups"
+                                                         ))
+fauna_df$fauna_metric <- factor(fauna_df$fauna_metric, levels = c("abundance", "taxo alpha div",
+                                                                  "taxo beta div", "other"))
+p2 <- ggplot(data = fauna_df,
+       aes(axis1 = fauna,
+           axis2 = fauna_cate,
+           axis3 = fauna_metric)) +
+  geom_alluvium(aes(color = fct_rev(fauna)), lode.guidance = "forward") +
+  geom_stratum() +
+  scale_color_manual(values = c("epifauna" = "#3d405b",
+                               "infauna" = "#e07a5f",
+                               "fish" = "#81b29a")) +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  theme_void() +
+  theme(legend.position = "none") + 
+  guides(fill = FALSE) +
+  theme(plot.margin = margin(0, 0, 0.65, 0, "cm")) 
+p2
+
+
+##############
+## Figure 5 ##
+##############
+
+p <-cowplot::plot_grid(p1, p2, ncol = 2, rel_widths = c(0.9, 1.1))
+p
+
+ggsave(here::here("02_FIGURES", "figure_5.pdf"), p, width = 2500, height = 1200, units = "px", dpi = 210,
+  device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+# Transition: type of study
+
+```{r}
+prep_df <- select(gdl_df, c(id_article, habitat_trait, trait_scale_measure, habitat_trait_method,
+                             trait_large_typo, trait_medium_typo, trait_finest_typo,
+                             trait_finest_typo, fauna_effect, rang)) %>%
+  distinct() %>%
+  select(id_article, habitat_trait, trait_finest_typo, fauna_effect, rang) %>%
+  filter(!is.na(habitat_trait))
+
+type_df <- prep_df
+
+type_df$pa <- NA
+type_df$pa[type_df$habitat_trait == "presence absence"] <- "presence"
+
+type_df$trait <- NA
+type_df$trait[type_df$habitat_trait != "presence absence"] <- "presence"
+
+tmp_df <- type_df %>%
+  group_by(id_article) %>%
+  summarize(
+    pa_unique = any(pa == "presence"),
+    trait_unique = any(trait == "presence")
+  ) %>%
+  ungroup() 
+
+type_df <- left_join(type_df, tmp_df, by = "id_article")
+
+type_df$approach_type <- NA
+
+type_df$approach_type[type_df$trait_unique == "TRUE" & type_df$pa_unique == "TRUE"] <- "Indirect effect of trait"
+type_df$approach_type[type_df$trait_unique == "TRUE" & is.na(type_df$pa_unique)] <- "Direct effect of trait"
+type_df$approach_type[is.na(type_df$trait_unique) & type_df$pa_unique == "TRUE"] <- "Relative effect of foundation species"
+
+tmp_df <- select(type_df, c("id_article", "approach_type")) %>%
+  distinct()
+
+tmp_df <- data.frame(table(tmp_df$approach_type))
+
+# % traits
+77*100/sum(tmp_df$Freq)
+
+# % comparison
+65*100/sum(tmp_df$Freq)
+
+# % comparaison with extra info on traits
+155*100/sum(tmp_df$Freq)
+```
+
+### Figure Sxx
+```{r}
+##################
+## Figure 3 (C) ##
+##################
+
+gdl_distri_df <- select(gdl_df, c(id_article, realm)) %>%
+  filter(!is.na(realm)) %>% 
+  distinct() %>% 
+  separate_rows(realm, sep = ";")
+
+
+count_distri_df <- data.frame(table(gdl_distri_df$realm))
+colnames(count_distri_df) <- c("realm", "count")
+
+# % temperate
+(46+139+47+27+5)*100/sum(count_distri_df$count)
+
+# % Temperate Northern Atlantic
+(139)*100/sum(count_distri_df$count)
+
+# % tropical
+(9+22+1+7)*100/sum(count_distri_df$count)
+
+# % polar
+(5+2)*100/sum(count_distri_df$count)
+
+count_distri_df <- count_distri_df[order(count_distri_df$count), ]
+levels <- as.character(count_distri_df$realm)
+count_distri_df$climat <- "temperate"
+count_distri_df$climat[count_distri_df$realm %in% c("Tropical Eastern Pacific", 
+                                                    "Western Indo-Pacific",
+                                                    "Central Indo-Pacific", 
+                                                    "Tropical Atlantic")] <- "tropical"
+count_distri_df$climat[count_distri_df$realm %in% c("Arctic", 
+                                                    "Southern Ocean")] <- "polar"
+count_distri_df$color <- NA
+count_distri_df$color[count_distri_df$climat == "temperate"] <- "#81b29a"
+count_distri_df$color[count_distri_df$climat == "tropical"] <- "#e07a5f"
+count_distri_df$color[count_distri_df$climat == "polar"] <- "#3d405b"
+
+count_distri_df$border_color <- count_distri_df$color
+count_distri_df$border_color[count_distri_df$border_color == "#81b29a"] <- "#5b7d6e"
+count_distri_df$border_color[count_distri_df$border_color == "#e07a5f"] <- "#a3543d"
+count_distri_df$border_color[count_distri_df$border_color == "#3d405b"] <- "#2a2d3f"
+
+plot_realm <- ggplot(count_distri_df, aes(x = count, y = factor(realm, levels = levels), fill = color, color = border_color)) +
+  geom_bar(stat="identity", position = "identity", size = 1) +
+  geom_text(aes(label = ..x..), hjust = -0.2, vjust = 0.5, color = "black", size = 4) +
+  labs(y = NULL, x = "article frequency", fill = NULL) +
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), limits=c(0,160),
+                     breaks = c(0, 25, 50, 75, 100, 125, 150)) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_fill_identity() +
+  scale_color_identity()
+
+plot_realm
+
+ggsave(here::here("03_FIGURES_VF", "figure_S3.0.pdf"), plot_realm, width = 1200, height = 800, units = "px", dpi = 210)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+
+```
+
+
+### Figure S6
+
+```{r}
+## Preprocessings
+
+compar_df <- gdl_df %>% 
+  select(id_article, habitat, habitat_sp, habitat_trait, habitat_large_typo,
+         habitat_medium_typo, habitat_small_typo, compar_info, habitat_trait, epifauna_pa, infauna_pa, 
+         fish_pa, fauna_com, fauna_metric, metric_com, rang, fauna_effect) %>% 
+  filter(habitat_trait == "presence absence") %>%
+  filter(!is.na(compar_info)) %>%
+  filter(!is.na(rang) | !is.na(fauna_effect)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>% 
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  distinct() 
+
+compar_fun <- function(df, metric) {
+  
+  prep_df <- filter(df, fauna_metric == metric) 
+  num_habitats <- length(unique(prep_df$habitat_small_typo))+1  # Nombre d'habitats uniques à comparer (je mets gdl_df pour avoir tous les habitats y compris ceux qui n'ont pas été comparé)
+  
+  habitat_names <- c(unique(prep_df$habitat_small_typo), "bare habitat")  # Noms des colonnes d'habitats à comparer
+  
+  # Matrices pour les comparaisons positives, négatives et les comparaisons avec le même rang
+  positive_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  negative_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  same_rank_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  non_spec_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  
+  prep_df$id_tmp <- paste0(prep_df$id_article, prep_df$fauna_com, prep_df$fauna_metric)
+  
+  ids <- unique(prep_df$id_tmp)  # Liste des ids uniques
+  
+  for (id in ids) {
+    split_df <- subset(prep_df, id_tmp == id)
+    bare_df <- filter(split_df, compar_info == "bare habitat")
+    biogenic_df <- filter(split_df, compar_info != "bare habitat")
+    # Boucle pour biogenic_df
+    if (nrow(biogenic_df) > 0) {
+      for (i in 1:nrow(biogenic_df)) {
+        focus_df <- biogenic_df[i,]
+        focus_habitat <- focus_df$habitat_small_typo
+        compar_df <- biogenic_df[-i,]
+        for (j in 1:nrow(compar_df)) {
+          compar_habitat <- compar_df[j,]$habitat_small_typo
+          if (!is.na(focus_df$rang) && !is.na(compar_df[j,]$rang)) {
+            if (focus_df$rang > compar_df[j,]$rang) {
+            positive_comparisons[focus_habitat, compar_habitat] <- positive_comparisons[focus_habitat, compar_habitat]+1
+          } 
+            else if (focus_df$rang < compar_df[j,]$rang) {
+            negative_comparisons[focus_habitat, compar_habitat] <- negative_comparisons[focus_habitat, compar_habitat]+1
+          } 
+            else if (focus_df$rang == compar_df[j,]$rang) {
+            same_rank_comparisons[focus_habitat, compar_habitat] <- same_rank_comparisons[focus_habitat, compar_habitat]+1
+          }
+          }
+          else {
+            non_spec_comparisons[focus_habitat, compar_habitat] <- non_spec_comparisons[focus_habitat, compar_habitat]+1
+
+          }
+        }
+      }
+    }
+    # Boucle pour bare_df
+    if (nrow(bare_df) > 0) {
+      for (k in 1:nrow(bare_df)) {
+        focus_df <- bare_df[k,]
+        focus_habitat <- focus_df$habitat_small_typo
+        compar_habitat <- "bare habitat"
+        if (!is.na(focus_df$rang)) {
+        if (focus_df$rang == 1) {
+          positive_comparisons[focus_habitat, compar_habitat] <- positive_comparisons[focus_habitat, compar_habitat]+1
+        } 
+        else if (focus_df$rang == 2) {
+          negative_comparisons[focus_habitat, compar_habitat] <- negative_comparisons[focus_habitat, compar_habitat]+1
+        } 
+        else if (focus_df$rang == 0) {
+          same_rank_comparisons[focus_habitat, compar_habitat] <- same_rank_comparisons[focus_habitat, compar_habitat]+1
+        }
+        }
+        else{
+          non_spec_comparisons[focus_habitat, compar_habitat] <- non_spec_comparisons[focus_habitat, compar_habitat]+1
+        }
+      }
+    }
+  }
+  
+  
+  habitat_names <- rownames(positive_comparisons)
+  
+  compar_df <- expand.grid(habitat_focus = habitat_names,
+                           habitat_compar = habitat_names)
+  
+  compar_df$positive <- positive_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$negative <- negative_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$absence <- same_rank_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$non_spec <- non_spec_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  
+  compar_df <- pivot_longer(compar_df, 
+                            cols = c(positive, negative, absence, non_spec),
+                            names_to = "compar_info",
+                            values_to = "count")
+  compar_df <- compar_df %>%
+    filter(habitat_focus != "bare habitat")
+  
+  compar_df <- compar_df %>%
+    group_by(habitat_focus, habitat_compar) %>%
+    mutate(total = sum(count)) %>%
+    ungroup()
+  
+  trans_compar_df <- compar_df %>%
+    group_by(habitat_focus, habitat_compar, compar_info) %>%
+    mutate(prop = count/total) %>%
+    ungroup()
+  
+  min_tot <- min(trans_compar_df$total) 
+  max_tot <- max(trans_compar_df$total)
+  
+  trans_compar_df <- trans_compar_df %>%
+    group_by(habitat_focus, habitat_compar) %>%
+    mutate(c_r_total_count = 0.5 + (total - min_tot) / (max_tot - min_tot))
+  
+  return(list(compar_df, trans_compar_df))
+}
+
+plot_prep_fun <- function(df){
+  df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(habitat_remove = sum(total)) %>%
+  ungroup() %>%
+  filter(habitat_remove != 0)
+}
+
+##################
+## Figure 6 (A) ##
+##################
+
+# Abundance
+
+prep_df <- filter(compar_df, epifauna_pa == "presence")
+hab_epifaune_score <- map(unique(prep_df$fauna_metric), ~compar_fun(prep_df, .))
+hab_epifaune_score <- setNames(hab_epifaune_score, unique(prep_df$fauna_metric))
+
+epi_abundance_df <- data.frame(hab_epifaune_score$`abundance`[2])
+epi_abundance_df <- plot_prep_fun(epi_abundance_df)
+
+df <- epi_abundance_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p1 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace_all("[–—]", "-")
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p1
+
+# Taxo alpha div
+
+epi_taxoalpha_df <- data.frame(hab_epifaune_score$`taxo alpha div`[2])
+epi_taxoalpha_df <- plot_prep_fun(epi_taxoalpha_df)
+
+df <- epi_taxoalpha_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p2 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p2
+
+# Taxo beta div
+
+epi_taxobeta_df <- data.frame(hab_epifaune_score$`taxo beta div`[2])
+epi_taxobeta_df <- plot_prep_fun(epi_taxobeta_df)
+
+df <- epi_taxobeta_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p3 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p3
+
+##################
+## Figure 6 (B) ##
+##################
+
+# Abundance
+
+prep_df <- filter(compar_df, infauna_pa == "presence")
+hab_infauna_score <- map(unique(prep_df$fauna_metric), ~compar_fun(prep_df, .))
+hab_infauna_score <- setNames(hab_infauna_score, unique(prep_df$fauna_metric))
+
+inf_abundance_df <- data.frame(hab_infauna_score$`abundance`[2])
+inf_abundance_df <- plot_prep_fun(inf_abundance_df)
+
+df <- inf_abundance_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p4 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+p4
+
+# Taxo alpha div
+
+inf_taxoalpha_df <- data.frame(hab_infauna_score$`taxo alpha div`[2])
+inf_taxoalpha_df <- plot_prep_fun(inf_taxoalpha_df)
+
+df <- inf_taxoalpha_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p5 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p5
+
+# Taxo beta div
+
+inf_taxobeta_df <- data.frame(hab_infauna_score$`taxo beta div`[2])
+inf_taxobeta_df <- plot_prep_fun(inf_taxobeta_df)
+
+df <- inf_taxobeta_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p6 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p6
+
+##################
+## Figure 6 (C) ##
+##################
+
+# Abundance
+
+prep_df <- filter(compar_df, fish_pa == "presence")
+hab_fish_score <- map(unique(prep_df$fauna_metric), ~compar_fun(prep_df, .))
+hab_fish_score <- setNames(hab_fish_score, unique(prep_df$fauna_metric))
+
+fish_abundance_df <- data.frame(hab_fish_score$`abundance`[2])
+fish_abundance_df <- plot_prep_fun(fish_abundance_df)
+
+df <- fish_abundance_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p7 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p7
+
+# Taxo alpha div
+
+fish_taxoalpha_df <- data.frame(hab_fish_score$`taxo alpha div`[2])
+fish_taxoalpha_df <- plot_prep_fun(fish_taxoalpha_df)
+
+df <- fish_taxoalpha_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p8 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p8
+
+# Taxo beta div
+
+fish_taxobeta_df <- data.frame(hab_fish_score$`taxo beta div`[2])
+fish_taxobeta_df <- plot_prep_fun(fish_taxobeta_df)
+
+df <- fish_taxobeta_df
+
+df$tmp <- NA
+df$tmp[df$habitat_focus == df$habitat_compar] <- "Intra-group"
+df$tmp[(df$habitat_focus != df$habitat_compar) & df$habitat_compar != "bare habitat"] <- "Inter-group"
+df$tmp[df$habitat_compar == "bare habitat"] <- "Bare substrate"
+
+df$habitat_compar <- df$tmp
+
+df <- df %>%
+  select(habitat_compar, compar_info, count) %>%
+  group_by(habitat_compar, compar_info) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  select(habitat_compar, compar_info, tot) %>%
+  distinct() %>%
+  filter(!(compar_info == "negative" & habitat_compar != "bare habitat")) %>% # counted twice
+  mutate(tot = ifelse(habitat_compar != "bare habitat" & compar_info %in% c("absence", "non_spec"), tot / 2, tot)) # counted twice
+df$compar_info <- factor(df$compar_info, levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(prop = tot / sum(tot))
+
+p9 <- ggplot(df, aes(y = habitat_compar, x = prop, fill = compar_info)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = tot), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p9
+
+##############
+## Figure 6 ##
+##############
+
+p <- cowplot::plot_grid(p1, p2, p3, p4, p5, p6, p7, p8, p9, ncol = 3)
+p
+ggsave(here::here("02_FIGURES", "figure_S3.1.pdf"), p, width = 2000, height = 1000, units = "px", dpi = 210,
+       device = cairo_pdf)
+
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure 7
+
+```{r}
+##################
+## Bubble chart ##
+##################
+
+all_df <- gdl_df %>%
+  select(id_article, habitat_trait, habitat_large_typo,
+         habitat_medium_typo,
+         habitat_small_typo, trait_large_typo, trait_medium_typo, trait_small_typo,
+         trait_finest_typo,
+         trait_scale_measure, habitat_trait_method) %>%
+  filter(habitat_trait != "presence absence") %>%
+  filter(!is.na(trait_large_typo)) %>%
+  filter(!is.na(trait_medium_typo)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  distinct() %>%
+  na.omit()
+
+tmp_df <- data.frame(table(all_df$trait_large_typo))
+# % habitat trait
+443*100/sum(tmp_df$Freq)
+
+# % indiv trait
+572*100/sum(tmp_df$Freq)
+
+tmp_df <- data.frame(table(all_df$trait_small_typo))
+
+# % habitat and individual extent
+(387+374)*100/sum(tmp_df$Freq)
+
+# % habitat and individual shape
+(138+71)*100/sum(tmp_df$Freq)
+
+# % composition
+(9)*100/sum(tmp_df$Freq)
+
+# % body and habitat status
+(47+20)*100/sum(tmp_df$Freq)
+
+count_df_1 <- data.frame(table(all_df$habitat_small_typo, all_df$trait_finest_typo))
+colnames(count_df_1) <- c("habitat", "trait", "freq1")
+
+hab_all <- unique(count_df_1$habitat)
+trait_all <- unique(count_df_1$trait)
+
+fauna_df <- gdl_df %>%
+  select(id_article, habitat, habitat_sp, habitat_trait, habitat_large_typo,
+         habitat_medium_typo,
+         habitat_small_typo, trait_large_typo, trait_medium_typo, trait_small_typo,
+         trait_finest_typo,
+         trait_scale_measure, habitat_trait_method, fauna_effect) %>%
+  filter(habitat_trait != "presence absence") %>%
+  filter(!is.na(trait_large_typo)) %>%
+  filter(!is.na(trait_medium_typo)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(!is.na(fauna_effect)) %>%
+  select(-fauna_effect) %>%
+  distinct() %>%
+  select(-c(habitat_sp)) %>%
+  na.omit() %>%
+  select(c(habitat_small_typo, trait_finest_typo, trait_scale_measure))
+
+tmp_df <- fauna_df
+tmp_df$trait_scale_measure[tmp_df$trait_scale_measure == "body-part"] <- "individual"
+tmp_df <- data.frame(table(tmp_df$trait_scale_measure))
+
+# % hab vs indiv trait relied to biodiversity
+# hab
+183*100/(121+183)
+# indiv
+121*100/(121+183)
+
+count_df_2 <- data.frame(table(fauna_df$habitat_small_typo, fauna_df$trait_finest_typo))
+colnames(count_df_2) <- c("habitat", "trait", "freq2")
+
+hab_obs <- unique(count_df_2$habitat)
+hab_miss <- hab_all[!(hab_all%in%hab_obs)]
+
+trait_obs <- unique(count_df_2$trait)
+trait_miss <- trait_all[!(trait_all%in%trait_obs)]
+
+miss_obs <- data_frame(habitat = rep(hab_miss, times = length(trait_obs)), trait = rep(trait_obs, times = length(hab_miss)), freq2 = rep(0, times = length(hab_miss)*length(trait_obs)))
+count_df_2 <- rbind(count_df_2, miss_obs)
+
+new_traits <- expand.grid(habitat = unique(count_df_2$habitat), trait = trait_miss)
+new_traits$freq2 <- 0
+
+count_df_2 <- rbind(count_df_2, new_traits)
+
+count_df <- merge(count_df_1, count_df_2, by = c("habitat", "trait"))
+
+count_df <- count_df %>%
+  group_by(habitat) %>%
+  mutate(prop_all = freq1/sum(freq1)) %>%
+  ungroup() %>%
+  mutate(prop_tested = freq2*prop_all/freq1) # proportion de la proption qui a été testée
+count_df$prop_all[count_df$prop_all == 0] <- NA
+count_df$prop_tested[is.na(count_df$prop_tested)] <- 0
+count_df$prop_tested[count_df$prop_tested == 0] <- NA
+
+tmp_count_df <- count_df %>%
+  select(habitat, trait, prop_all) %>%
+  mutate(prop_all = if_else(is.na(prop_all), 0, prop_all)) %>%
+  pivot_wider(names_from = trait, values_from = prop_all)
+
+tmp_count_df <- column_to_rownames(tmp_count_df, "habitat")
+
+dist_mat <- dist(tmp_count_df)
+
+clust_habitat <- hclust(dist_mat, method="ward.D2")
+
+plot(cluster::silhouette(cutree(clust_habitat,3), dist_mat))
+
+habitat_cluster <- cutree(clust_habitat, k = 3)
+
+habitat_cluster_df <- data.frame(
+  habitat = names(habitat_cluster),
+  cluster = habitat_cluster
+)
+
+# Trier par numéro de cluster
+habitat_cluster_df <- habitat_cluster_df[order(habitat_cluster_df$cluster), ]
+
+habitat_order <- clust_habitat$labels[clust_habitat$order]
+
+sorted_trait <- c(
+  "body size", "body mass", "body volume",
+  "body area", "body branching", "body status",
+  "body shape miscellaneous", "body fractal dimension", "elemental composition", 
+  "body interstitial space", 
+  "growth rate", "flexibility", 
+  "density", "habitat cover", "habitat shape miscellaneous", "habitat biomass", "habitat area", "habitat status",
+  "habitat size", "habitat rugosity", "habitat taxonomic diversity", "habitat volume", "habitat interstitial space", 
+  "habitat branching", "habitat functional diversity", "stability"
+) # sorted by total abundance of trait and by individual to habitat trait
+
+count_df$habitat <- factor(count_df$habitat, levels = habitat_order)
+count_df$trait <- factor(count_df$trait, levels = sorted_trait)
+
+p <- ggplot(count_df, aes(x = trait, y = habitat)) +
+  geom_point(aes(size = prop_all), fill = "white", color = "black", shape = 21) + 
+  geom_point(aes(size = prop_tested), color = "#3d405b") +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+  scale_x_discrete(
+    labels = function(x) {
+      x %>%
+        str_to_sentence()               
+    }
+  ) +
+  coord_fixed() +
+  theme_void() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, color = "black"),
+    axis.text.y = element_text(vjust = 0.5, hjust = 1, color = "black"),
+    legend.title = element_blank()
+  )
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_7.pdf"), p, width = 1500, height = 1500, units = "px", dpi = 210
+       # ,
+# device = cairo_pdf
+)
+
+##############
+## Barplots ##
+##############
+
+full_df <- gdl_df %>%
+  select(id_article, habitat_trait, trait_scale_measure,
+                             trait_large_typo, trait_medium_typo, trait_small_typo,
+                             trait_finest_typo, habitat_trait_method, fauna_effect) %>%
+  filter(habitat_trait != "presence absence") %>%
+  filter(!is.na(trait_large_typo)) %>%
+  filter(!is.na(trait_medium_typo)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(trait_finest_typo))
+
+tot_df <- full_df %>%
+  select(-fauna_effect) %>%
+  distinct() 
+
+tot_df <- data.frame(table(tot_df$trait_finest_typo))
+colnames(tot_df) <- c("trait", "tot")
+
+# % 4 most studied traits
+tmp_df <- data.frame(table(all_df$trait_finest_typo))
+(141+85+117+88)*100/sum(tmp_df$Freq)
+
+test_df <- full_df %>%
+  filter(!is.na(fauna_effect)) %>%
+  select(-fauna_effect) %>%
+  distinct()
+
+test_df <- data.frame(table(test_df$trait_finest_typo))
+
+colnames(test_df) <- c("trait", "test")
+
+fauna_df <- select(gdl_df, c(id_article, 
+                            habitat, habitat_sp, habitat_large_typo,
+                            habitat_medium_typo, habitat_small_typo, 
+                            habitat_trait, trait_finest_typo,
+                            epifauna_pa, infauna_pa, fish_pa, all_pa, functional_group_pa,
+                            taxo_group_pa, species_scale_pa, fauna_metric, fauna_effect,
+                            fauna_com)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  filter(!(is.na(all_pa) & is.na(functional_group_pa) & is.na(taxo_group_pa)
+           & is.na(species_scale_pa))) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(!is.na(fauna_effect)) %>%
+  filter(!is.na(fauna_metric)) %>%
+  distinct() 
+
+sign_df <- fauna_df %>%
+  filter(fauna_effect %in% c("positive", "negative", "presence", "mixed"))
+
+sign_df <- data.frame(table(sign_df$trait_finest_typo))
+colnames(sign_df) <- c("trait", "sign")
+
+tot_test_df <- fauna_df 
+
+tot_test_df <- data.frame(table(tot_test_df$trait_finest_typo))
+colnames(tot_test_df) <- c("trait", "tot_test")
+
+sign_df <- left_join(sign_df, tot_test_df) %>%
+  mutate(prop_sign = sign/tot_test) %>%
+  select("trait", "prop_sign")
+
+recap_df <- left_join(tot_df, test_df)
+recap_df <- left_join(recap_df, sign_df)
+recap_df$test[is.na(recap_df$test)] <- 0
+recap_df$prop_sign[is.na(recap_df$prop_sign)] <- 0
+
+recap_df <- recap_df %>%
+  mutate(prop_test = test/tot)
+
+# % of trait tested with biodiversity
+sum(recap_df$test)*100/sum(recap_df$tot) # trait tested at least once with biodiversity
+
+sign_df <- fauna_df %>%
+  filter(fauna_effect %in% c("positive", "negative", "presence", "mixed"))
+
+# % of trait tested with an effect
+nrow(sign_df)*100/nrow(fauna_df)
+  
+
+trait_count_long <- recap_df %>%
+  pivot_longer(cols = c(tot, prop_test, prop_sign), names_to = "measure", values_to = "value")
+
+trait_count_long <- filter(trait_count_long, measure == "tot")
+
+trait_count_long$measure[trait_count_long$measure == "tot"] <- "number of times the trait has been measured"
+
+trait_count_long$trait <- factor(trait_count_long$trait, levels = sorted_trait)
+
+p <- ggplot(trait_count_long, aes(x = measure, y = value, fill = measure)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~trait) +
+  scale_fill_manual(values = c("number of times the trait has been measured" = "#e07a5f", 
+                               "number of times the effect of the trait has been tested"= "#3d405b", 
+                               "number of times the effect of the trait has been significant" = "#81b29a")) +
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color = "black"),  
+    axis.title.y = element_text(size = 14, color = "black"),  
+    axis.text.x = element_text(size = 12, color = "black"),   
+    axis.text.y = element_text(size = 12, color = "black")
+  ) +
+  scale_y_continuous(expand = c(0,0)) +
+  guides(fill = guide_legend(title = NULL, nrow = 3, byrow = TRUE, reverse = TRUE))
+
+p
+ggsave(here::here("02_FIGURES", "figure_7_bar1.pdf"), p, width = 300, height = 1500, units = "px", dpi = 210)
+
+
+recap_df2 <- recap_df
+
+trait_count_long2 <- recap_df2 %>%
+  pivot_longer(cols = c(prop_test, prop_sign), names_to = "measure", values_to = "value")
+
+trait_count_long2$measure[trait_count_long2$measure == "prop_test"] <- "proportion of time the effect of the trait has been tested"
+trait_count_long2$measure[trait_count_long2$measure == "prop_sign"] <- "proportion of time the effect of the trait has been significant"
+
+trait_count_long2$measure <- factor(trait_count_long2$measure, levels = c("proportion of time the effect of the trait has been tested", "proportion of time the effect of the trait has been significant"))
+
+trait_count_long2$trait <- factor(trait_count_long2$trait, levels = sorted_trait)
+
+p <- ggplot(trait_count_long2, aes(x = measure, y = value, fill = measure)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~trait) +
+  scale_fill_manual(values = c("proportion of time the effect of the trait has been tested"= "#3d405b", 
+                               "proportion of time the effect of the trait has been significant" = "#81b29a")) +
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14, color = "black"),  
+    axis.title.y = element_text(size = 14, color = "black"),  
+    axis.text.x = element_text(size = 12, color = "black"),   
+    axis.text.y = element_text(size = 12, color = "black")
+  ) +
+  scale_y_continuous(expand = c(0,0)) +
+  guides(fill = guide_legend(title = NULL, nrow = 3, byrow = TRUE, reverse = TRUE))
+
+ggsave(here::here("02_FIGURES", "figure_7_bar2.pdf"), p, width = 300, height = 1500, units = "px", dpi = 210)
+
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure S7
+
+```{r}
+fauna_df <- select(gdl_df, c(id_article, 
+                            habitat, habitat_sp, habitat_large_typo,
+                            habitat_medium_typo, habitat_small_typo, 
+                            habitat_trait, trait_finest_typo,
+                            epifauna_pa, infauna_pa, fish_pa, all_pa, functional_group_pa,
+                            taxo_group_pa, species_scale_pa, fauna_metric, fauna_effect,
+                            fauna_com)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  filter(!(is.na(all_pa) & is.na(functional_group_pa) & is.na(taxo_group_pa)
+           & is.na(species_scale_pa))) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(!is.na(fauna_effect)) %>%
+  filter(!is.na(fauna_metric)) %>%
+  distinct()
+
+fauna_df$epifauna_pa[fauna_df$epifauna_pa == "presence"] <- "epifauna"
+fauna_df$infauna_pa[fauna_df$infauna_pa == "presence"] <- "infauna"
+fauna_df$fish_pa[fauna_df$fish_pa == "presence"] <- "fish"
+
+fauna_df <- fauna_df %>%
+  pivot_longer(cols = c(epifauna_pa, infauna_pa, fish_pa),
+               names_to = "fauna_categories",
+               values_to = "fauna") %>%
+  drop_na(fauna) %>%
+  select(-fauna_categories)
+
+most_studied_traits_df <- data.frame(table(fauna_df$trait_finest_typo)) %>%
+  arrange(desc(Freq))
+most_studied_traits_df
+
+prop <- sum(most_studied_traits_df$Freq[1:4])*100/sum(most_studied_traits_df$Freq)
+prop
+
+most_studied_traits <- as.character(most_studied_traits_df$Var1[1:4])
+
+fauna_df <- fauna_df %>%
+  filter(trait_finest_typo %in% most_studied_traits) %>%
+  filter(fauna_metric %in% c("abundance", "taxo alpha div", "taxo beta div")) %>%
+  select(trait_finest_typo, fauna, fauna_metric, fauna_effect) 
+fauna_df$fauna_effect[fauna_df$fauna_effect == "mixed"] <- "presence"
+fauna_df$fauna_effect[fauna_df$fauna_metric == "taxo beta div" & fauna_df$fauna_effect == "presence"] <- "sign. diff"
+fauna_df$fauna_effect[fauna_df$fauna_effect == "presence"] <- "non_spec"
+
+##################
+## Figure 8 (A) ##
+##################
+
+epi_abundance_df <- fauna_df %>%
+  filter(fauna == "epifauna") %>%
+  filter(fauna_metric == "abundance") %>%
+  select(-c(fauna, fauna_metric))
+
+epi_abundance_df <- data.frame(table(epi_abundance_df$trait_finest_typo,
+                                     epi_abundance_df$fauna_effect))
+colnames(epi_abundance_df) <- c("trait_finest_typo", "fauna_effect", "count")
+epi_abundance_df <- epi_abundance_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+epi_abundance_df$trait_finest_typo <- factor(epi_abundance_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+epi_abundance_df$fauna_effect <- factor(epi_abundance_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p1 <- ggplot(epi_abundance_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p1
+
+epi_taxo_alpha_df <- fauna_df %>%
+  filter(fauna == "epifauna") %>%
+  filter(fauna_metric == "taxo alpha div") %>%
+  select(-c(fauna, fauna_metric))
+
+epi_taxo_alpha_df <- data.frame(table(epi_taxo_alpha_df$trait_finest_typo,
+                                     epi_taxo_alpha_df$fauna_effect))
+colnames(epi_taxo_alpha_df) <- c("trait_finest_typo", "fauna_effect", "count")
+epi_taxo_alpha_df <- epi_taxo_alpha_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+epi_taxo_alpha_df$trait_finest_typo <- factor(epi_taxo_alpha_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+epi_taxo_alpha_df$fauna_effect <- factor(epi_taxo_alpha_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p2 <- ggplot(epi_taxo_alpha_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p2
+
+epi_taxo_beta_df <- fauna_df %>%
+  filter(fauna == "epifauna") %>%
+  filter(fauna_metric == "taxo beta div") %>%
+  select(-c(fauna, fauna_metric))
+
+epi_taxo_beta_df <- data.frame(table(epi_taxo_beta_df$trait_finest_typo,
+                                     epi_taxo_beta_df$fauna_effect))
+colnames(epi_taxo_beta_df) <- c("trait_finest_typo", "fauna_effect", "count")
+epi_taxo_beta_df <- epi_taxo_beta_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+epi_taxo_beta_df$trait_finest_typo <- factor(epi_taxo_beta_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+epi_taxo_beta_df$fauna_effect <- factor(epi_taxo_beta_df$fauna_effect,
+                                             levels = rev(c("sign. diff", "absence")))
+
+p3 <- ggplot(epi_taxo_beta_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("sign. diff" = "#22577a", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p3
+
+##################
+## Figure 8 (B) ##
+##################
+
+inf_abundance_df <- fauna_df %>%
+  filter(fauna == "infauna") %>%
+  filter(fauna_metric == "abundance") %>%
+  select(-c(fauna, fauna_metric))
+
+inf_abundance_df <- data.frame(table(inf_abundance_df$trait_finest_typo,
+                                     inf_abundance_df$fauna_effect))
+colnames(inf_abundance_df) <- c("trait_finest_typo", "fauna_effect", "count")
+inf_abundance_df <- inf_abundance_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+inf_abundance_df$trait_finest_typo <- factor(inf_abundance_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+inf_abundance_df$fauna_effect <- factor(inf_abundance_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p4 <- ggplot(inf_abundance_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p4
+
+inf_taxo_alpha_df <- fauna_df %>%
+  filter(fauna == "infauna") %>%
+  filter(fauna_metric == "taxo alpha div") %>%
+  select(-c(fauna, fauna_metric))
+
+inf_taxo_alpha_df <- data.frame(table(inf_taxo_alpha_df$trait_finest_typo,
+                                     inf_taxo_alpha_df$fauna_effect))
+
+colnames(inf_taxo_alpha_df) <- c("trait_finest_typo", "fauna_effect", "count")
+
+inf_taxo_alpha_df <- inf_taxo_alpha_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+inf_taxo_alpha_df$trait_finest_typo <- as.character(inf_taxo_alpha_df$trait_finest_typo)
+
+missing_trait_df <- data.frame(
+  trait_finest_typo = c("body size", "body size", "body size"), 
+  fauna_effect = c("non_spec", "positive","absence"), 
+  count = c(0, 0, 0),
+  tot = c(0, 0, 0), 
+  prop = c(0, 0, 0),
+  stringsAsFactors = FALSE
+)
+
+inf_taxo_alpha_df <- rbind(inf_taxo_alpha_df, missing_trait_df) # add missing trait
+
+inf_taxo_alpha_df$trait_finest_typo <- factor(inf_taxo_alpha_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+inf_taxo_alpha_df$fauna_effect <- factor(inf_taxo_alpha_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p5 <- ggplot(inf_taxo_alpha_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p5
+
+inf_taxo_beta_df <- fauna_df %>%
+  filter(fauna == "infauna") %>%
+  filter(fauna_metric == "taxo beta div") %>%
+  select(-c(fauna, fauna_metric))
+
+inf_taxo_beta_df <- data.frame(table(inf_taxo_beta_df$trait_finest_typo,
+                                     inf_taxo_beta_df$fauna_effect))
+colnames(inf_taxo_beta_df) <- c("trait_finest_typo", "fauna_effect", "count")
+inf_taxo_beta_df <- inf_taxo_beta_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+inf_taxo_beta_df$trait_finest_typo <- factor(inf_taxo_beta_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+inf_taxo_beta_df$fauna_effect <- factor(inf_taxo_beta_df$fauna_effect,
+                                             levels = rev(c("sign. diff", "absence")))
+
+p6 <- ggplot(inf_taxo_beta_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("sign. diff" = "#22577a", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p6
+
+##################
+## Figure 8 (C) ##
+##################
+
+fish_abundance_df <- fauna_df %>%
+  filter(fauna == "fish") %>%
+  filter(fauna_metric == "abundance") %>%
+  select(-c(fauna, fauna_metric))
+
+fish_abundance_df <- data.frame(table(fish_abundance_df$trait_finest_typo,
+                                     fish_abundance_df$fauna_effect))
+colnames(fish_abundance_df) <- c("trait_finest_typo", "fauna_effect", "count")
+fish_abundance_df <- fish_abundance_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+fish_abundance_df$trait_finest_typo <- factor(fish_abundance_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+fish_abundance_df$fauna_effect <- factor(fish_abundance_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p7 <- ggplot(fish_abundance_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p7
+
+fish_taxo_alpha_df <- fauna_df %>%
+  filter(fauna == "fish") %>%
+  filter(fauna_metric == "taxo alpha div") %>%
+  select(-c(fauna, fauna_metric))
+
+fish_taxo_alpha_df <- data.frame(table(fish_taxo_alpha_df$trait_finest_typo,
+                                     fish_taxo_alpha_df$fauna_effect))
+colnames(fish_taxo_alpha_df) <- c("trait_finest_typo", "fauna_effect", "count")
+fish_taxo_alpha_df <- fish_taxo_alpha_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+fish_taxo_alpha_df$trait_finest_typo <- factor(fish_taxo_alpha_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+fish_taxo_alpha_df$fauna_effect <- factor(fish_taxo_alpha_df$fauna_effect,
+                                             levels = rev(c("positive", "negative",
+                                                        "non_spec", "absence")))
+
+p8 <- ggplot(fish_taxo_alpha_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red",
+                               "non_spec" = "lightblue", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p8
+
+fish_taxo_beta_df <- fauna_df %>%
+  filter(fauna == "fish") %>%
+  filter(fauna_metric == "taxo beta div") %>%
+  select(-c(fauna, fauna_metric))
+
+fish_taxo_beta_df <- data.frame(table(fish_taxo_beta_df$trait_finest_typo,
+                                     fish_taxo_beta_df$fauna_effect))
+colnames(fish_taxo_beta_df) <- c("trait_finest_typo", "fauna_effect", "count")
+fish_taxo_beta_df <- fish_taxo_beta_df %>%
+  group_by(trait_finest_typo) %>%
+  mutate(tot = sum(count)) %>%
+  ungroup() %>%
+  mutate(prop = count/tot)
+
+fish_taxo_beta_df$trait_finest_typo <- factor(fish_taxo_beta_df$trait_finest_typo,
+                                             levels = rev(c("habitat cover", "density",
+                                                        "body size", "body mass")))
+fish_taxo_beta_df$fauna_effect <- factor(fish_taxo_beta_df$fauna_effect,
+                                             levels = rev(c("sign. diff", "absence")))
+
+p9 <- ggplot(fish_taxo_beta_df, aes(y = trait_finest_typo, x = prop, fill = fauna_effect)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = count), position = position_stack(vjust = 0.5), size = 3) +
+  labs(y = NULL, x = NULL, fill = NULL) +
+  scale_fill_manual(values = c("sign. diff" = "#22577a", "absence" = "grey"),
+                    guide = "none") +
+  theme_classic() +
+    scale_y_discrete(
+  labels = function(x) {
+    x %>%
+      stringr::str_replace("^(\\p{L})", ~ stringr::str_to_upper(.x)) 
+  }
+) +
+  theme(legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 12),   
+    axis.text.y = element_text(size = 12)
+) +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p9
+
+p <- cowplot::plot_grid(p1, p2, p3, p4, p5, p6, p7, p8, p9, ncol = 3)
+p
+ggsave(here::here("02_FIGURES", "figure_S3.2.pdf"), p, width = 2140, height = 1160, units = "px", dpi = 210,
+       device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+## Supplementary
+
+### Figure S2
+
+```{r}
+habitat_df <- select(gdl_df, c(id_article, habitat, habitat_sp, habitat_large_typo, habitat_medium_typo, habitat_small_typo)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  distinct()
+
+habitat_df$habitat_large_typo[habitat_df$habitat_large_typo == "mixed species"] <- "mixed species"
+habitat_df$habitat_medium_typo[habitat_df$habitat_medium_typo == "mixed species"] <- "mixed species "
+
+firstnode_df <- select(habitat_df, habitat_large_typo)
+firstnode_df$from <- "origin"
+colnames(firstnode_df) <- c("to", "from")
+firstnode_df <- firstnode_df[, c(2,1)]
+
+secondnode_df <- select(habitat_df, c(habitat_large_typo, habitat_medium_typo))
+colnames(secondnode_df) <- c("from", "to")
+
+tmp_df <- data.frame(table(habitat_df$habitat_small_typo))
+colnames(tmp_df) <- c("habitat_small_typo", "count")
+
+leaf_df <- select(habitat_df, c(habitat_medium_typo, habitat_small_typo))
+leaf_df <- left_join(leaf_df, tmp_df, by = "habitat_small_typo")
+
+leaf_df$habitat_small_typo <- paste0(leaf_df$habitat_small_typo, " (n = ", leaf_df$count, ")")
+
+leaf_df <- select(leaf_df, -count)
+
+colnames(leaf_df) <- c("from", "to")
+
+edges <- do.call(rbind, list(firstnode_df, secondnode_df, leaf_df)) %>%
+  distinct()
+
+edges[edges$from==edges$to,]
+
+count_df <- data.frame(table(do.call(rbind, list(firstnode_df, secondnode_df, leaf_df)))) 
+count_df <- count_df %>%
+  filter(Freq != 0)
+
+tot_habitat <- sum(table(habitat_df$habitat_large_typo))
+tot_df <- data.frame(from = NA, to = "origin", Freq = tot_habitat)
+
+# We can add a second data frame with information for each node
+vertices <- rbind(tot_df, count_df)
+colnames(vertices) <- c("group", "name", "value")
+vertices <- vertices[, c(2,1,3)]
+
+vertices[vertices$name==vertices$group,]
+
+# vertices <- distinct(vertices, name, .keep_all = TRUE)
+
+# Create a graph object
+mygraph <- graph_from_data_frame(edges, vertices=vertices)
+
+p <- ggraph(mygraph, layout = 'dendrogram') + 
+  geom_edge_diagonal(edge_colour = "grey") +  
+  geom_node_text(aes(label = ifelse(name == "origin", "", name)), color = "#000000", angle = 0,
+  hjust = 0, nudge_y = 0.05, size = 14) +
+  # geom_node_text(aes(label = ifelse(name == "origin", "", value)), hjust = 0, 
+  #                nudge_y = 0.05, size = 9, color = "#000000") +
+  geom_node_point(aes(size = value
+                      # , color = I(color)
+                      ), alpha = 0.7) +
+  # scale_size_area(max_size = 100) +  # Ajoutez cette ligne pour modifier l'échelle des points
+  scale_size_continuous(breaks = c(500, 300, 150, 50), labels = c(500, 300, 150, 50)) +
+  ylim(-0.6, NA) +
+  coord_flip() + 
+  scale_y_reverse() +
+  expand_limits(y = c(-1.5, 0)) +  # Ajustez les limites ici
+  theme_void() +
+  theme(legend.position = "bottom", legend.justification = "left")
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_S2.pdf"), p, width = 7000, height = 3500, units = "px", dpi = 210)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+
+number_df <- leaf_df %>% # used bellow
+  select(to) %>%
+  distinct() %>%
+  separate(to, into = c("habitat", "numb"), sep = " \\(n = ")
+
+number_df$numb <- gsub("\\)", "", number_df$numb)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure S3
+
+```{r}
+trait_df <- select(gdl_df, c(id_article, habitat_trait, trait_scale_measure,
+                             trait_large_typo, trait_medium_typo, trait_small_typo,
+                             trait_finest_typo, habitat_trait_method)) %>%
+  filter(habitat_trait != "presence absence") %>%
+  filter(!is.na(trait_large_typo)) %>%
+  filter(!is.na(trait_medium_typo)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  distinct()
+
+trait_df$trait_small_typo[trait_df$trait_small_typo == "body exent"] <- "body extent"
+
+trait_df$trait_small_typo[trait_df$trait_small_typo == "body form" & 
+                            trait_df$trait_finest_typo == "body weight"] <- "body extent"
+
+trait_df$trait_small_typo[trait_df$trait_small_typo == "diversity"] <- "habitat composition"
+trait_df$trait_small_typo[trait_df$trait_small_typo == "habitat status"] <- "habitat status "
+
+trait_df$trait_small_typo[trait_df$trait_small_typo == "elemental composition"] <- "body elemental composition"
+trait_df$trait_small_typo[trait_df$trait_small_typo == "life history rate"] <- "body activity"
+
+trait_df$trait_large_typo[trait_df$trait_large_typo == "species trait"] <- "individual trait"
+trait_df$trait_large_typo[trait_df$trait_large_typo == "patch or community features"] <- "habitat trait"
+
+firstnode_df <- select(trait_df, trait_large_typo)
+firstnode_df$from <- "origin"
+colnames(firstnode_df) <- c("to", "from")
+firstnode_df <- firstnode_df[, c(2,1)]
+
+secondnode_df <- select(trait_df, c(trait_large_typo, trait_medium_typo))
+colnames(secondnode_df) <- c("from", "to")
+
+thirdnode_df <- select(trait_df, c(trait_medium_typo, trait_small_typo))
+colnames(thirdnode_df) <- c("from", "to")
+
+tmp_df <- data.frame(table(trait_df$trait_finest_typo))
+colnames(tmp_df) <- c("trait_finest_typo", "count")
+
+leaf_df <- select(trait_df, c(trait_small_typo, trait_finest_typo))
+leaf_df <- left_join(leaf_df, tmp_df, by = "trait_finest_typo")
+
+leaf_df$trait_finest_typo <- paste0(leaf_df$trait_finest_typo, " (n = ", leaf_df$count, ")")
+
+leaf_df <- select(leaf_df, -count)
+
+colnames(leaf_df) <- c("from", "to")
+
+edges <- do.call(rbind, list(firstnode_df, secondnode_df, thirdnode_df,
+                             leaf_df)) %>%
+  distinct()
+
+count_df <- data.frame(table(do.call(rbind, list(firstnode_df, secondnode_df, thirdnode_df,
+                                                 leaf_df)))) 
+count_df <- count_df %>%
+  filter(Freq != 0)
+
+tot_trait <- sum(table(trait_df$trait_large_typo))
+tot_df <- data.frame(from = NA, to = "origin", Freq = tot_trait)
+
+vertices <- rbind(tot_df, count_df)
+colnames(vertices) <- c("group", "name", "value")
+vertices <- vertices[, c(2,1,3)]
+
+# vertices <- vertices %>%
+#   left_join(count_fauna_df, by = "name") %>%
+#   replace_na(list(fauna_count = 0))
+
+# Create a graph object
+mygraph <- graph_from_data_frame(edges, vertices=vertices)
+
+p <- ggraph(mygraph, layout = 'dendrogram') + 
+  geom_edge_diagonal(edge_colour = "grey") +  
+  geom_node_text(aes(label = ifelse(name == "origin", "", name)), color = "#000000", angle = 0,
+  hjust = 0, vjust = 0.3, nudge_y = 0.05, size = 9) +
+  # geom_node_text(aes(label = ifelse(name == "origin", "", value)), hjust = 0, 
+  #                nudge_y = 0.05, size = 9, color = "#000000") +
+  geom_node_point(aes(size = value
+                      # , color = I(color)
+                      ), alpha = 0.7) +
+  scale_size_area(max_size = 9) +  # Ajoutez cette ligne pour modifier l'échelle des points
+  scale_size_continuous(breaks = c(500, 300, 150, 50), labels = c(500, 300, 150, 50)) +
+  ylim(-0.6, NA) +
+  coord_flip() + 
+  scale_y_reverse() +
+  expand_limits(y = c(-1.5, 0)) +  # Ajustez les limites ici
+  theme_void() +
+  theme(legend.position = "bottom", legend.justification = "left")
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_S3.pdf"), p, width = 7000, height = 3000, units = "px", dpi = 210)
+
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure S4
+
+```{r}
+###################
+## Figure S4 (A) ##
+###################
+
+spext_df <- gdl_df %>%
+  filter(!is.na(spatial_extent)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, spatial_extent, habitat_small_typo, habitat_sp) %>%
+  distinct() %>%
+  select(habitat_small_typo, spatial_extent)
+
+spext_pooled_df <- spext_df %>%
+  select(spatial_extent)
+
+p1 <- ggplot(spext_df, aes(y = habitat_small_typo, x = spatial_extent)) +
+  geom_boxplot() +
+  geom_dotplot(binaxis='x', stackdir='center', dotsize=0.005) +
+  geom_jitter(shape=16, position=position_jitter(0.2), alpha=0.5) +
+  scale_x_continuous(expand = c(0,0), trans = 'log1p', breaks = c(0, 10, 100, 1000), 
+                     limits = c(0, max(spext_df$spatial_extent) + 1000), oob = scales::squish) +
+    scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+  labs(y = NULL, x = expression("Spatial extent (log scale, in km)"), fill = NULL) +
+  theme_classic() +
+  theme(panel.grid.major.x = element_blank() ,
+        panel.grid.major.y = element_line( size=.1, color="grey80" ) 
+    )
+
+
+p1
+p3 <- ggplot (data = spext_pooled_df, aes(x = spatial_extent)) +
+  geom_density() +
+  scale_x_continuous(expand = c(0,0), trans = 'log1p', breaks = c(0, 10, 100, 1000), 
+                     limits = c(0, max(spext_df$spatial_extent))) +
+  theme_void() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank())
+
+p3
+
+p1 <- p3 / p1 +
+  patchwork::plot_layout(ncol = 1, heights = c(1, 3)) +
+  patchwork::plot_layout(heights = c(0.1, 0.9))
+p1
+
+###################
+## Figure S4 (B) ##
+###################
+
+spres_df <- gdl_df %>%
+  filter(!is.na(spatial_resolution)) %>%
+  filter(!is.na(trait_small_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  filter(!is.na(trait_finest_typo)) %>%
+  filter(habitat_trait != "presence absence") %>%
+  select(id_article, spatial_resolution, habitat_small_typo, habitat_trait, habitat_sp)%>%
+  distinct() %>%
+  select(habitat_small_typo, spatial_resolution)
+
+spres_pooled_df <- spres_df %>%
+  select(spatial_resolution)
+
+p2 <- ggplot(spres_df, aes(y = habitat_small_typo, x = spatial_resolution)) +
+  geom_boxplot() +
+  geom_dotplot(binaxis='x', stackdir='center', dotsize=0.005) +
+  geom_jitter(shape=16, position=position_jitter(0.2), alpha = 0.5) +
+  scale_x_continuous(expand = c(0,0),trans = 'log1p', breaks = c(0, 1, 10, 100),
+                     limits = c(0, max(spres_df$spatial_resolution) + 25), oob = scales::squish) +
+  labs(y = NULL, x = expression("Spatial resolution (log scale, in " * m^2 * ")"), fill = NULL) +
+  theme_classic() +
+  theme(panel.grid.major.x = element_blank() ,
+        panel.grid.major.y = element_line(size=.1, color="grey80") ,
+        axis.text.y = element_blank()
+    )
+
+p2
+
+p4 <- ggplot (data = spres_pooled_df, aes(x = spatial_resolution)) +
+  geom_density() +
+  scale_x_continuous(expand = c(0,0), trans = 'log1p', breaks = c(0, 1, 10, 100), 
+                     limits = c(0, max(spres_pooled_df$spatial_resolution))) +
+  theme_void() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank())
+
+p4
+
+p2 <- p4 / p2 +
+  patchwork::plot_layout(ncol = 1, heights = c(1, 3)) +
+  patchwork::plot_layout(heights = c(0.1, 0.9))
+p2
+
+###############
+## Figure S4 ##
+###############
+
+p <- cowplot::plot_grid(p1, p2, ncol = 2, rel_widths = c(1.2, 0.8))
+p
+ggsave(here::here("02_FIGURES", "figure_S5.2.pdf"), p, width = 2000, height = 1000, units = "px", dpi = 210, device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure S5
+
+```{r}
+###################
+## Figure S5 (A) ##
+###################
+
+tempext_df <- gdl_df %>%
+  filter(!is.na(temporal_extent)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, temporal_extent, habitat_small_typo, habitat_trait, habitat_sp) %>%
+  distinct() %>%
+  select(habitat_small_typo, temporal_extent)
+
+p1 <- ggplot(tempext_df, aes(y = habitat_small_typo, x = temporal_extent)) +
+  geom_boxplot() +
+  geom_dotplot(binaxis='x', stackdir='center', dotsize=0.005) +
+  geom_jitter(shape=16, position=position_jitter(0.2), alpha = 0.5) +
+  scale_x_continuous(expand = c(0,0), limits = c(0, max(tempext_df$temporal_extent)+2), oob = scales::squish) +
+  labs(y = NULL, x = expression("Temporal extent (in year)"), fill = NULL) +
+  scale_y_discrete(
+    labels = function(x) {
+      x %>%
+        str_replace_all("[–—]", "-") %>%
+        str_to_sentence()               
+    }
+  ) +
+  theme_classic() +
+  theme(panel.grid.major.x = element_blank() ,
+        panel.grid.major.y = element_line( size=.1, color="grey80" )
+    )
+
+p1
+
+p2 <- ggplot (data = spres_pooled_df, aes(x = spatial_resolution)) +
+  geom_density() +
+  scale_x_continuous(expand = c(0,0), trans = 'log1p', breaks = c(0, 1, 10, 100), 
+                     limits = c(0, max(spres_pooled_df$spatial_resolution))) +
+  theme_void() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank())
+
+p2
+
+p1 <- p2 / p1 +
+  patchwork::plot_layout(ncol = 1, heights = c(0.1, 0.9)) 
+
+p1
+
+###################
+## Figure S5 (B) ##
+###################
+
+tempres_df <- gdl_df %>%
+  filter(!is.na(temporal_resolution)) %>%
+  filter(!is.na(habitat_small_typo)) %>%
+  select(id_article, study_type, temporal_resolution, habitat_small_typo, habitat_trait, habitat_sp) %>%
+  distinct()
+
+tempres_df$temporal_resolution[tempres_df$temporal_resolution == "other"] <- "irregular"
+
+obs_df <- tempres_df %>%
+  filter(study_type == "observation")
+
+hab_obs <- unique(obs_df$habitat_small_typo)
+hab_all <- unique(gdl_df$habitat_small_typo)
+hab_miss <- hab_all[!(hab_all%in%hab_obs)]
+
+miss_obs <- data_frame(id_article = "no data", study_type = "no data", temporal_resolution = "no data",
+                       habitat_small_typo = hab_miss, habitat_trait = "no data",habitat_sp = "no data")
+obs_df <- rbind(obs_df, miss_obs)
+obs_df$temporal_resolution <- factor(obs_df$temporal_resolution, levels = unique(obs_df$temporal_resolution))
+
+exp_df <- tempres_df %>%
+  filter(study_type %in% c("field experiment", "laboratory experiment"))
+
+hab_exp <- unique(exp_df$habitat_small_typo)
+hab_miss <- hab_all[!(hab_all%in%hab_exp)]
+
+miss_exp <- data_frame(id_article = "no data", study_type = "no data", temporal_resolution = "no data",
+                       habitat_small_typo = hab_miss, habitat_trait = "no data",habitat_sp = "no data")
+exp_df <- rbind(exp_df, miss_exp)
+
+p_obs <- ggplot(obs_df, aes(y = habitat_small_typo, fill = factor(temporal_resolution, 
+                                                                 levels = rev(c("snapshot", "hour", 
+                                                                                "day",
+                                                                            "week", "month", "season",
+                                                                            "year", "irregular", "no data"))))) +
+  geom_bar(position = "fill", stat = "count") +
+  labs(y = NULL, x = "Temporal resolution frequency", fill = NULL) +
+  scale_fill_manual(values = c("snapshot" = "#023047",  "hour" = "#1e6091","day" = "#168aad", "week" = "#34a0a4",
+                               "month" = "#52b69a", "season" = "#76c893", "year" = "#99d98c", 
+                               "irregular" = "grey90", "no data" = "grey99")) +  
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  theme(axis.text.y = element_blank()) +
+  guides(fill = FALSE)
+
+p_obs
+
+empty_plot <- ggplot () +
+  geom_density() +
+  scale_x_continuous(limits = c(0, max(spres_pooled_df$spatial_resolution))) +
+  theme_void() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank())
+
+p_obs <- empty_plot / p_obs +
+  patchwork::plot_layout(ncol = 1, heights = c(0.1, 0.9))
+
+p_exp <- ggplot(exp_df, aes(y = habitat_small_typo, fill = factor(temporal_resolution, 
+                                                                 levels = rev(c("snapshot", "hour", 
+                                                                                "day",
+                                                                            "week", "month", "season",
+                                                                            "year", "irregular", "no data"))))) +
+  geom_bar(position = "fill", stat = "count") +
+  labs(y = NULL, x = "Temporal resolution frequency", fill = NULL) +
+  scale_fill_manual(
+  values = c("snapshot" = "#184e77",  
+             "hour" = "#1e6091",
+             "day" = "#168aad",
+             "week" = "#34a0a4",
+             "month" = "#52b69a",
+             "season" = "#76c893",
+             "year" = "#99d98c", 
+             "irregular" = "grey90",
+             "no data" = "grey99"),
+  labels = c("snapshot" = "Snapshot",
+             "hour" = "Hour",
+             "day" = "Day",
+             "week" = "Week",
+             "month" = "Month",
+             "season" = "Season",
+             "year" = "Year",
+             "irregular" = "Irregular",
+             "no data" = "No data")) +  
+  theme_classic() +
+  scale_x_continuous(expand = c(0,0), labels = function(x) ifelse(x %in% c(0, 1), as.character(x), x)) +
+  theme(axis.text.y = element_blank()) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+p_exp
+
+p_exp <- empty_plot / p_exp +
+  patchwork::plot_layout(ncol = 1, heights = c(0.1, 0.9))
+
+p3 <- cowplot::plot_grid(p_obs, p_exp, ncol = 2, rel_widths = c(0.9, 1.2))
+
+p3
+
+###############
+## Figure S5 ##
+###############
+
+p <- cowplot::plot_grid(p1, p3, ncol = 2, rel_widths = c(0.85, 0.8), rel_heights = c(2,1))
+p
+
+ggsave(here::here("02_FIGURES", "figure_S5.3.pdf"), p, width = 2500, height = 1000, units = "px", dpi = 210,
+       device = cairo_pdf)
+# /!\ The aesthetics of the figure have been enhanced for the article using inkscape
+```
+
+### Figure S6
+
+```{r}
+compar_df <- gdl_df %>% 
+  select(id_article, habitat, habitat_sp, habitat_trait, habitat_large_typo,
+         habitat_medium_typo, habitat_small_typo, compar_info, habitat_trait, epifauna_pa, infauna_pa, 
+         fish_pa, fauna_com, fauna_metric, metric_com, rang, fauna_effect) %>% 
+  filter(habitat_trait == "presence absence") %>%
+  filter(!is.na(compar_info)) %>%
+  filter(!is.na(rang) | !is.na(fauna_effect)) %>%
+  filter(!is.na(habitat_large_typo)) %>%
+  filter(!is.na(habitat_medium_typo)) %>%
+  filter(!is.na(habitat_small_typo)) %>% 
+  filter(!(is.na(epifauna_pa) & is.na(infauna_pa) & is.na(fish_pa))) %>%
+  distinct() 
+
+compar_fun <- function(df, metric) {
+  
+  prep_df <- filter(df, fauna_metric == metric) 
+  num_habitats <- length(unique(prep_df$habitat_small_typo))+1  # Nombre d'habitats uniques à comparer (je mets gdl_df pour avoir tous les habitats y compris ceux qui n'ont pas été comparé)
+  
+  habitat_names <- c(unique(prep_df$habitat_small_typo), "bare habitat")  # Noms des colonnes d'habitats à comparer
+  
+  # Matrices pour les comparaisons positives, négatives et les comparaisons avec le même rang
+  positive_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  negative_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  same_rank_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  non_spec_comparisons <- matrix(0, nrow = num_habitats, ncol = num_habitats, dimnames = list(habitat_names, habitat_names))
+  
+  prep_df$id_tmp <- paste0(prep_df$id_article, prep_df$fauna_com, prep_df$fauna_metric)
+  
+  ids <- unique(prep_df$id_tmp)  # Liste des ids uniques
+  
+  for (id in ids) {
+    split_df <- subset(prep_df, id_tmp == id)
+    bare_df <- filter(split_df, compar_info == "bare habitat")
+    biogenic_df <- filter(split_df, compar_info != "bare habitat")
+    # Boucle pour biogenic_df
+    if (nrow(biogenic_df) > 0) {
+      for (i in 1:nrow(biogenic_df)) {
+        focus_df <- biogenic_df[i,]
+        focus_habitat <- focus_df$habitat_small_typo
+        compar_df <- biogenic_df[-i,]
+        for (j in 1:nrow(compar_df)) {
+          compar_habitat <- compar_df[j,]$habitat_small_typo
+          if (!is.na(focus_df$rang) && !is.na(compar_df[j,]$rang)) {
+            if (focus_df$rang > compar_df[j,]$rang) {
+            positive_comparisons[focus_habitat, compar_habitat] <- positive_comparisons[focus_habitat, compar_habitat]+1
+            # if (focus_habitat == "canopy-forming algae") {
+            #   print(focus_df$id_article)
+            #   print(focus_habitat)
+            #   print("+1")
+            # }
+            
+          } 
+            else if (focus_df$rang < compar_df[j,]$rang) {
+            negative_comparisons[focus_habitat, compar_habitat] <- negative_comparisons[focus_habitat, compar_habitat]+1
+          } 
+            else if (focus_df$rang == compar_df[j,]$rang) {
+            same_rank_comparisons[focus_habitat, compar_habitat] <- same_rank_comparisons[focus_habitat, compar_habitat]+1
+          }
+          }
+          else {
+            non_spec_comparisons[focus_habitat, compar_habitat] <- non_spec_comparisons[focus_habitat, compar_habitat]+1
+
+          }
+        }
+      }
+    }
+    # Boucle pour bare_df
+    if (nrow(bare_df) > 0) {
+      for (k in 1:nrow(bare_df)) {
+        focus_df <- bare_df[k,]
+        focus_habitat <- focus_df$habitat_small_typo
+        compar_habitat <- "bare habitat"
+        if (!is.na(focus_df$rang)) {
+        if (focus_df$rang == 1) {
+          positive_comparisons[focus_habitat, compar_habitat] <- positive_comparisons[focus_habitat, compar_habitat]+1
+        } 
+        else if (focus_df$rang == 2) {
+          negative_comparisons[focus_habitat, compar_habitat] <- negative_comparisons[focus_habitat, compar_habitat]+1
+        } 
+        else if (focus_df$rang == 0) {
+          same_rank_comparisons[focus_habitat, compar_habitat] <- same_rank_comparisons[focus_habitat, compar_habitat]+1
+        }
+        }
+        else{
+          non_spec_comparisons[focus_habitat, compar_habitat] <- non_spec_comparisons[focus_habitat, compar_habitat]+1
+        }
+      }
+    }
+  }
+  
+  
+  habitat_names <- rownames(positive_comparisons)
+  print(habitat_names)
+  
+  compar_df <- expand.grid(habitat_focus = habitat_names,
+                           habitat_compar = habitat_names)
+  
+  compar_df$positive <- positive_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$negative <- negative_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$absence <- same_rank_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  compar_df$non_spec <- non_spec_comparisons[cbind(compar_df$habitat_focus,
+                                                   compar_df$habitat_compar)]
+  
+  compar_df <- pivot_longer(compar_df, 
+                            cols = c(positive, negative, absence, non_spec),
+                            names_to = "compar_info",
+                            values_to = "count")
+  compar_df <- compar_df %>%
+    filter(habitat_focus != "bare habitat")
+  
+  compar_df <- compar_df %>%
+    group_by(habitat_focus, habitat_compar) %>%
+    mutate(total = sum(count)) %>%
+    ungroup()
+  
+  trans_compar_df <- compar_df %>%
+    group_by(habitat_focus, habitat_compar, compar_info) %>%
+    mutate(prop = count/total) %>%
+    ungroup()
+  
+  min_tot <- min(trans_compar_df$total) 
+  max_tot <- max(trans_compar_df$total)
+  
+  trans_compar_df <- trans_compar_df %>%
+    group_by(habitat_focus, habitat_compar) %>%
+    mutate(c_r_total_count = 0.5 + (total - min_tot) / (max_tot - min_tot))
+  
+  return(list(compar_df, trans_compar_df))
+}
+
+plot_prep_fun <- function(df){
+  df <- df %>%
+  group_by(habitat_compar) %>%
+  mutate(habitat_remove = sum(total)) %>%
+  ungroup() %>%
+  filter(habitat_remove != 0)
+}
+
+plot_fun <- function(df){
+  p <- ggplot(data=df, aes(x = as.numeric(c_r_total_count)/2, y = prop, group = compar_info, fill = compar_info , width = as.numeric(c_r_total_count))) + 
+  facet_grid(c(.~habitat_focus, .~ habitat_compar), switch = "y") + 
+  geom_bar(stat = "identity", position = "fill") + 
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red", "non_spec" = "lightblue","absence" = "grey"), 
+                    name = "") + 
+  theme_void() + 
+  theme(strip.text.x.top = element_text(angle = 90), 
+        strip.text.x = element_text(hjust = 0, size = 12), 
+        strip.text.y = element_text(hjust = 1, size = 12), legend.position ="bottom")
+return(p)
+}
+
+prep_df <- compar_df
+hab_pool_score <- map(unique(prep_df$fauna_metric), ~compar_fun(prep_df, .))
+hab_pool_score <- setNames(hab_pool_score, unique(prep_df$fauna_metric))
+
+hab_pool_abundance_df <- data.frame(hab_pool_score$`abundance`[2])
+
+hab_pool_abundance_df$tmp <- NA
+hab_pool_abundance_df$tmp[hab_pool_abundance_df$habitat_focus == hab_pool_abundance_df$habitat_compar] <- "same FS group"
+hab_pool_abundance_df$tmp[(hab_pool_abundance_df$habitat_focus != hab_pool_abundance_df$habitat_compar) & hab_pool_abundance_df$habitat_compar != "bare habitat"] <- "other FS group"
+hab_pool_abundance_df$tmp[hab_pool_abundance_df$habitat_compar == "bare habitat"] <- "bare habitat"
+
+hab_pool_abundance_df$habitat_compar <- hab_pool_abundance_df$tmp
+
+hab_pool_abundance_df <- hab_pool_abundance_df %>%
+  select(habitat_focus, habitat_compar, compar_info, count) %>%
+  group_by(habitat_focus, habitat_compar, compar_info) %>%
+  summarise(count = sum(count)) 
+
+habitat_order <- as.character(unique(gdl_df$habitat_small_typo))
+
+miss_habitat <- habitat_order[!(habitat_order %in% unique(hab_pool_abundance_df$habitat_focus))]
+miss_habitat_df <- data.frame(habitat_focus = rep(miss_habitat, each = 12),
+                              habitat_compar = rep(c("bare habitat", "other FS group", "same FS group"), each = 4),
+                              compar_info = rep(c("absence", "negative", "non_spec", "positive"), times = 3),
+                              count = rep(0, times = length(miss_habitat)*4))
+
+hab_pool_abundance_df <- rbind(hab_pool_abundance_df, miss_habitat_df)
+
+hab_pool_abundance_df$habitat_compar <- factor(hab_pool_abundance_df$habitat_compar, levels = c("bare habitat",
+                                                                                                "other FS group",
+                                                                                                "same FS group"))
+
+hab_pool_abundance_df$habitat_focus <- factor(hab_pool_abundance_df$habitat_focus, levels = rev(habitat_order))
+
+# hab_pool_abundance_df <- plot_prep_fun(hab_pool_abundance_df)
+
+hab_pool_abundance_df$habitat_compar <- factor(hab_pool_abundance_df$habitat_compar, levels = rev(unique(hab_pool_abundance_df$habitat_compar)))
+
+tmp <- uncount(hab_pool_abundance_df, count)
+
+hab_pool_abundance_df <- left_join(tmp, hab_pool_abundance_df)
+
+hab_pool_abundance_df$compar_info <- factor(hab_pool_abundance_df$compar_info,
+                                               levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+p <- ggplot() +
+  geom_bar(data = hab_pool_abundance_df, aes(x = habitat_compar, fill = compar_info), 
+           position = "fill", stat = "count") +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red", "non_spec" = "lightblue","absence" = "grey"), name = "") +
+  geom_text(data = hab_pool_abundance_df %>% 
+              distinct() %>%
+              group_by(habitat_focus, habitat_compar) %>% 
+              summarise(count = sum(count)), 
+            aes(x = habitat_compar, y = count, label = count), 
+            position = position_fill(vjust = 1), 
+            vjust = -0.5, size = 5) +
+  facet_wrap(~ habitat_focus, ncol=5) +
+  coord_cartesian(ylim = c(0, 1.1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.25)) +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    axis.title.x = element_blank(),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 14, angle = 90),   
+    axis.text.y = element_text(size = 14)) +
+  labs(y = "proportion of measured relative effects") +
+  scale_y_continuous(expand = c(0,0)) 
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_S6.pdf"), p, width = 4000, height = 4000, units = "px", dpi = 210)
+```
+
+### Figure S7
+
+```{r}
+hab_pool_alpha_df <- data.frame(hab_pool_score$`taxo alpha div`[2])
+
+hab_pool_alpha_df$tmp <- NA
+hab_pool_alpha_df$tmp[hab_pool_alpha_df$habitat_focus == hab_pool_alpha_df$habitat_compar] <- "same FS group"
+hab_pool_alpha_df$tmp[(hab_pool_alpha_df$habitat_focus != hab_pool_alpha_df$habitat_compar) & hab_pool_alpha_df$habitat_compar != "bare habitat"] <- "other FS group"
+hab_pool_alpha_df$tmp[hab_pool_alpha_df$habitat_compar == "bare habitat"] <- "bare habitat"
+
+hab_pool_alpha_df$habitat_compar <- hab_pool_alpha_df$tmp
+
+hab_pool_alpha_df <- hab_pool_alpha_df %>%
+  select(habitat_focus, habitat_compar, compar_info, count) %>%
+  group_by(habitat_focus, habitat_compar, compar_info) %>%
+  summarise(count = sum(count)) 
+
+miss_habitat <- habitat_order[!(habitat_order %in% unique(hab_pool_alpha_df$habitat_focus))]
+miss_habitat_df <- data.frame(habitat_focus = rep(miss_habitat, each = 12),
+                              habitat_compar = rep(c("bare habitat", "other FS group", "same FS group"), each = 4),
+                              compar_info = rep(c("absence", "negative", "non_spec", "positive"), times = 3),
+                              count = rep(0, times = length(miss_habitat)*4))
+
+hab_pool_alpha_df <- rbind(hab_pool_alpha_df, miss_habitat_df)
+
+hab_pool_alpha_df$habitat_compar <- factor(hab_pool_alpha_df$habitat_compar, levels = c("bare habitat",
+                                                                                                "other FS group",
+                                                                                                "same FS group"))
+
+hab_pool_alpha_df$habitat_focus <- factor(hab_pool_alpha_df$habitat_focus, levels = rev(habitat_order))
+
+# hab_pool_alpha_df <- plot_prep_fun(hab_pool_alpha_df)
+
+hab_pool_alpha_df$habitat_compar <- factor(hab_pool_alpha_df$habitat_compar, levels = rev(unique(hab_pool_alpha_df$habitat_compar)))
+
+tmp <- uncount(hab_pool_alpha_df, count)
+
+hab_pool_alpha_df <- left_join(tmp, hab_pool_alpha_df)
+
+hab_pool_alpha_df$compar_info <- factor(hab_pool_alpha_df$compar_info,
+                                               levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+p <- ggplot() +
+  geom_bar(data = hab_pool_alpha_df, aes(x = habitat_compar, fill = compar_info), 
+           position = "fill", stat = "count") +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red", "non_spec" = "lightblue","absence" = "grey"), name = "") +
+  geom_text(data = hab_pool_alpha_df %>% 
+              distinct() %>%
+              group_by(habitat_focus, habitat_compar) %>% 
+              summarise(count = sum(count)), 
+            aes(x = habitat_compar, y = count, label = count), 
+            position = position_fill(vjust = 1), 
+            vjust = -0.5, size = 5) +
+  facet_wrap(~ habitat_focus, ncol=5) +
+  coord_cartesian(ylim = c(0, 1.1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.25)) +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    axis.title.x = element_blank(),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 14, angle = 90),   
+    axis.text.y = element_text(size = 14)) +
+  labs(y = "proportion of measured relative effects") +
+  scale_y_continuous(expand = c(0,0)) 
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_S7.pdf"), p, width = 4000, height = 4000, units = "px", dpi = 210)
+```
+
+### Figure S8
+
+```{r}
+hab_pool_beta_df_df <- data.frame(hab_pool_score$`taxo beta div`[2])
+
+hab_pool_beta_df_df$tmp <- NA
+hab_pool_beta_df_df$tmp[hab_pool_beta_df_df$habitat_focus == hab_pool_beta_df_df$habitat_compar] <- "same FS group"
+hab_pool_beta_df_df$tmp[(hab_pool_beta_df_df$habitat_focus != hab_pool_beta_df_df$habitat_compar) & hab_pool_beta_df_df$habitat_compar != "bare habitat"] <- "other FS group"
+hab_pool_beta_df_df$tmp[hab_pool_beta_df_df$habitat_compar == "bare habitat"] <- "bare habitat"
+
+hab_pool_beta_df_df$habitat_compar <- hab_pool_beta_df_df$tmp
+
+hab_pool_beta_df_df <- hab_pool_beta_df_df %>%
+  select(habitat_focus, habitat_compar, compar_info, count) %>%
+  group_by(habitat_focus, habitat_compar, compar_info) %>%
+  summarise(count = sum(count)) 
+
+miss_habitat <- habitat_order[!(habitat_order %in% unique(hab_pool_beta_df_df$habitat_focus))]
+miss_habitat_df <- data.frame(habitat_focus = rep(miss_habitat, each = 12),
+                              habitat_compar = rep(c("bare habitat", "other FS group", "same FS group"), each = 4),
+                              compar_info = rep(c("absence", "negative", "non_spec", "positive"), times = 3),
+                              count = rep(0, times = length(miss_habitat)*4))
+
+hab_pool_beta_df_df <- rbind(hab_pool_beta_df_df, miss_habitat_df)
+
+hab_pool_beta_df_df$habitat_compar <- factor(hab_pool_beta_df_df$habitat_compar, levels = c("bare habitat",
+                                                                                                "other FS group",
+                                                                                                "same FS group"))
+
+hab_pool_beta_df_df$habitat_focus <- factor(hab_pool_beta_df_df$habitat_focus, levels = rev(habitat_order))
+
+# hab_pool_beta_df_df <- plot_prep_fun(hab_pool_beta_df_df)
+
+hab_pool_beta_df_df$habitat_compar <- factor(hab_pool_beta_df_df$habitat_compar, levels = rev(unique(hab_pool_beta_df_df$habitat_compar)))
+
+tmp <- uncount(hab_pool_beta_df_df, count)
+
+hab_pool_beta_df_df <- left_join(tmp, hab_pool_beta_df_df)
+
+hab_pool_beta_df_df$compar_info <- factor(hab_pool_beta_df_df$compar_info,
+                                               levels = rev(c("positive", "negative", "non_spec", "absence")))
+
+p <- ggplot() +
+  geom_bar(data = hab_pool_beta_df_df, aes(x = habitat_compar, fill = compar_info), 
+           position = "fill", stat = "count") +
+  scale_fill_manual(values = c("positive" = "darkgreen", "negative" = "red", "non_spec" = "#22577a","absence" = "grey"), name = "") +
+  geom_text(data = hab_pool_beta_df_df %>% 
+              distinct() %>%
+               group_by(habitat_focus, habitat_compar) %>% 
+              summarise(count = sum(count)), 
+            aes(x = habitat_compar, y = count, label = count), 
+            position = position_fill(vjust = 1), 
+            vjust = -0.5, size = 5) +
+  facet_wrap(~ habitat_focus, ncol=5) +
+  coord_cartesian(ylim = c(0, 1.1)) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.25)) +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    axis.title.x = element_blank(),  
+    axis.title.y = element_text(size = 14),  
+    axis.text.x = element_text(size = 14, angle = 90),   
+    axis.text.y = element_text(size = 14)) +
+  labs(y = "proportion of measured relative effects") +
+  scale_y_continuous(expand = c(0,0)) 
+
+p
+
+ggsave(here::here("02_FIGURES", "figure_S8.pdf"), p, width = 4000, height = 4000, units = "px", dpi = 210)
+```
